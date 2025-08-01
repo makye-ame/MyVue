@@ -394,11 +394,11 @@ export default {
 ```
 **挂载结果**
 
-![add更新结果图](../public/imgs/runtime_update.png)
+![add更新结果图](../_media/runtime_update.png)
 
 点击add按钮后能监听到变化，页面进行了更新
 
-![hide更新结果图](../public/imgs/runtime_update2.png)
+![hide更新结果图](../_media/runtime_update2.png)
 
 点击hide按钮后能监听到变化，页面隐藏了数量的显示
 ## 最后

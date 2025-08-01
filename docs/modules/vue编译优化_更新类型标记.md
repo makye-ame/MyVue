@@ -438,7 +438,7 @@ const template = `
 ```
 ### 执行结果
 点击add按钮后，跳过静态节点对比2次
-![优化结果图1](../public/imgs/transform_result1.png)
+![优化结果图1](../_media/transform_result1.png)
 点击hide按钮隐藏再显示，跳过静态节点对比2次，创建1次
-![优化结果图2](../public/imgs/transform_result2.png)
+![优化结果图2](../_media/transform_result2.png)
 

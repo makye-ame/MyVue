@@ -1,6 +1,6 @@
 # vue任务调度器-实现dom异步批量更新
 前面我们已经完成了vue渲染管线的编译、挂载和更新了，框架的核心机制已经完成。
-![hide点击更新结果图](../public/imgs/runtime_update2.png)
+![hide点击更新结果图](../_media/runtime_update2.png)
 不过注意观察的同学，会发现在点击hide之后，appComponent执行了2次更新,这是因为hide按钮的点击导致了2个变量的更改。这里应该再优化优化，做到像vue一样异步批量处理dom更新。
 
 另外说到dom异步更新，你是否想到nextTick方法？
@@ -133,5 +133,5 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
 }
 ```
 执行效果：
-![任务调度结果图](../public/imgs/scheduler_result.png)
+![任务调度结果图](../_media/scheduler_result.png)
 可以看到，点击hide按钮后，检测到2次数据更新，但是update只执行了一次。而且nextTick的回调在更新之后执行，并准确拿到了按钮的文案

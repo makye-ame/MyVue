@@ -426,8 +426,8 @@ createApp(App).mount('#app')
 ```
 **挂载结果**
 
-![挂载结果图](../public/imgs/runtime_mounted.png)
+![挂载结果图](../_media/runtime_mounted.png)
 
 点击hide按钮后也能监听到变化，执行了watchEffect副作用回调，但页面并没有更新，因为还未处理更新的逻辑，更新逻辑详见下篇文章
 
-![更新监测图](../public/imgs/runtime_mountrd2.png)
+![更新监测图](../_media/runtime_mountrd2.png)

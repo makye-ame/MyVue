@@ -213,7 +213,7 @@ const template = `
 const ast = parse(template)
 ```
 parse结果如下：
-![parse结果图](../public/imgs/compile_parse.png)
+![parse结果图](../_media/compile_parse.png)
 
 ## createVNode函数
 在讲generate阶段之前，先了解下createVNode函数。
@@ -385,5 +385,5 @@ const ast = parse(template)
 generate(ast)
 ```
 generate结果如下：
-![generate结果图](../public/imgs/compile_generate.png)
+![generate结果图](../_media/compile_generate.png)
 

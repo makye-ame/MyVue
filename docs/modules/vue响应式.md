@@ -1,5 +1,5 @@
 # Vue响应式系统实现剖析
-## 一、vue reactive代理
+## 一、vue reactive
 Vue 的reactive函数是实现响应式数据的核心机制，它基于 JavaScript 的 Proxy（代理）模式。下面用生活化的比喻解释这个概念：
 ### 什么是代理模式?
 想象你是一位忙碌的明星，粉丝想找你签名、预约活动，但你没时间直接处理。于是你雇了一位经纪人（代理）：
@@ -30,33 +30,38 @@ Vue 会检查新值是否不同，如果不同则触发更新（通知所有依�
 // core.js
 // 建立源对象和代理之间的映射，避免重复代理
 const reactiveMap = new WeakMap()
+// reative代理对象，支持深层嵌套
 export const reactive = function (obj) {
-  if (typeof obj !== 'object' || obj === null) {
-    return obj // 非对象或 null 不需要代理
-  }
-  // 已经有代理直接返回
-  if (reactiveMap.has(obj)) {
-    return reactiveMap.get(obj)
-  }
-  // reactive做两件事，1：生成一个proxy对象，2.做get，set拦截
-  const proxy = new Proxy(obj, {
-    get(target, key) {
-      // 收集订阅者
-      track(target, key)
-      // 返回数据
-      return target[key]      
-    },
-    set(target, key, value) {
-      target[key] = value
-      // 触发更新
-      trigger(target, key)
-      // set必须设置返回
-      return true
-    },
-  })
-  // 目标对象和代理对象建立映射关系
-  reactiveMap.set(obj, proxy)
-  return proxy
+    if (typeof obj !== 'object' || obj === null) {
+        return obj // 非对象或 null 不需要代理
+    }
+    // 已经有代理直接返回
+    if (reactiveMap.has(obj)) {
+        return reactiveMap.get(obj)
+    }
+    // reactive做两件事，1：生成一个proxy对象，2.做get，set拦截
+    const proxy = new Proxy(obj, {
+        get(target, key) {
+            // 收集订阅者
+            track(target, key)
+            let value = target[key]
+            if (typeof value === 'object') {
+                return reactive(value)
+            } else {
+                return value
+            }
+        },
+        set(target, key, value) {
+            target[key] = value
+            // 触发更新
+            trigger(target, key)
+            // set必须设置返回
+            return true
+        },
+    })
+    // 目标对象和代理对象建立映射关系
+    reactiveMap.set(obj, proxy)
+    return proxy
 }
 // dom更新是副作用，watchEffect回调是副作用，可以把副作用看成是订阅者
 let currentEffect = null
@@ -131,59 +136,22 @@ obj.age = 19
 obj.age = 20
 ```
 执行结果：
-![执行结果图](../public/imgs/响应式_watchEffect.png)
+![执行结果图](../_media/reactive_watchEffect.png)
 
 ### watchEffect解析
 它的实现代码很简单，构造了一个副作用函数effect，把当前currentEffect设置为effect，然后执行update函数，最后再把currentEffect设置为null。
 它的特点是effect会立即执行，也就是update函数会立即执行，函数里使用到了哪些响应式数据，便会触发get劫持，也就会触发依赖收集，这就是自动收集依赖的关键！
 
-## 四、vue watch
-watch 就像一个 “指定盯梢员”—— 你得明确告诉它：“我要盯着 A 数据，只要 A 变了，你就去做 B 这件事”。
-比如你跟同事说：“你帮我盯着前台的快递，如果有我的快递到了（A 变了），就马上叫我去取（做 B）”。
-这里的关键是：必须先说清楚 “盯什么”，它才会在 “被盯的东西变了” 之后执行你安排的动作。
-与watchEffect不同的点就在于，watch需要明确告诉它盯什么，而watchEffect不需要！
-
-### watch代码实现
-```
-// core.js
-// watch默认非立即执行，并且是深度监听的
-// 这里只简单模拟非深度监听
-export const watch = function (dependency, cb) {
-    // 监测reactive对象
-    let oldObj = { ...dependency }
-    watchEffect(() => {
-        const newObj = dependency
-        // 比较变化
-        if (JSON.stringify(oldObj) !== JSON.stringify(newObj)) {
-            cb(newObj, oldObj)
-            oldObj = { ...newObj }
-        }
-    })
-}
-```
-
-现在来验证下功能：
-```core.js
-// test
-const obj = reactive({ name: 'zhangsan', age: 18 })
-watch(obj, () => {
-    console.log('最新年龄是：', obj.age)
-})
-obj.age = 19
-obj.age = 20
-```
-执行结果：
-![执行结果图](../public/imgs/响应式_watch.png)
-
-## 五、ref
+## 三、ref
+### ref如何设计的？
 ref返回一个特定的对象，它专门有一个 value 属性，用来存储值。
 ref跟reactive使用proxy代理不一样，是直接对value属性进行get，set劫持
 ref一般用来包裹基本类型的值，也可以包裹对象。如果被包裹值为对象，那么会自动调用reactive方法，把对象变成响应式的。
 
 ### ref代码实现
-
 ```core.js
 // core.js
+// ref的默认值可以是普通类型，也可以是对象，如果是对象，会再封装成reactie
 export const ref = function (defaultV) {
     const refObj = {
         get value() {
@@ -213,9 +181,69 @@ countRef.value = 1
 countRef.value = 2
 ```
 执行结果：
-![执行结果图](../public/imgs/响应式_ref.png)
+![执行结果图](../_media/reactive_ref.png)
 
-## 六、computed计算属性
+## 四、vue watch
+watch 就像一个 “指定盯梢员”—— 你得明确告诉它：“我要盯着 A 数据，只要 A 变了，你就去做 B 这件事”。
+比如你跟同事说：“你帮我盯着前台的快递，如果有我的快递到了（A 变了），就马上叫我去取（做 B）”。
+这里的关键是：必须先说清楚 “盯什么”，它才会在 “被盯的东西变了” 之后执行你安排的动作。
+与watchEffect不同的点就在于，watch需要明确告诉它盯什么，而watchEffect不需要！
+
+### watch代码实现
+```
+// core.js
+// watch可以监听ref、reactive对象和getter函数
+// 这里watch会立即执行，并深层监听
+// 监听返回响应式属性的getter函数，可以精确监听reactive的某个属性，而不是全部属性。
+// 但如果这个属性是对象，只有在返回不同的对象时，才会触发回调，也就是说非深层监听
+
+export const watch = function (dependency, cb) {
+    let oldValue
+    if (typeof dependency === 'function') {
+        // getter函数
+        oldValue = dependency()
+        watchEffect(() => {
+            const newValue = dependency()
+            if (oldValue !== newValue) {
+                cb(newValue, oldValue)
+                oldValue = newValue
+            }
+        })
+    } else {
+        // 深度拷贝对象
+        let oldClone = JSON.parse(JSON.stringify(dependency))
+        watchEffect(() => {
+            // 比较变化
+            if (JSON.stringify(oldClone) !== JSON.stringify(dependency)) {
+                // 如果是ref，返回value
+                if (dependency.value) {
+                    cb(dependency.value, oldClone?.value)
+                } else {
+                    cb(dependency, dependency)
+                }
+                oldClone = JSON.parse(JSON.stringify(dependency))
+            }
+        })
+    }
+
+}
+```
+
+现在来验证下功能：
+```core.js
+// test
+const obj = reactive({ name: 'zhangsan', age: 18 })
+watch(obj, () => {
+    console.log('最新年龄是：', obj.age)
+})
+obj.age = 19
+obj.age = 20
+```
+执行结果：
+![执行结果图](../_media/reactive_watch.png)
+
+
+## 五、vue computed
 computed 就像一个 “自动更新的计算器”。
 比如你有两个数字：一个是 “苹果的单价”（响应式数据 A），一个是 “买的数量”（响应式数据 B）。
 你告诉 computed：“帮我算一下‘单价 × 数量’的总价”。
@@ -252,7 +280,7 @@ countRef.value = 1
 countRef.value = 2
 ```
 执行结果：
-![执行结果图](../public/imgs/响应式_computed.png)
+![执行结果图](../_media/reactive_computed.png)
 
 ## 最后
-这篇文章带大家一起简单模拟了下vue响应式各功能的代码实现，主要是为了理解vue响应式的原理，代码实现比较简单，没有考虑一些边界情况以及多类型场景。更详细的模拟代码请参考[vue 响应式原理](https://vue3js.cn/docs/reactivity/)
+这篇文章带大家一起简单模拟了下vue响应式各功能的代码实现，主要是为了理解vue响应式的原理，代码实现比较简单，没有考虑一些边界情况以及多类型场景。更详细的模拟代码请参考[vue 响应式原理](https://github.com/tangtang4321/MyVue/blob/main/src/libs/core.js)
