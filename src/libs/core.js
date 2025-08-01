@@ -13,8 +13,12 @@ export const reactive = function (obj) {
         get(target, key) {
             // 收集订阅者
             track(target, key)
-            // 返回数据
-            return target[key]
+            let value = target[key]
+            if (typeof value === 'object') {
+                return reactive(value)
+            } else {
+                return value
+            }
         },
         set(target, key, value) {
             target[key] = value
@@ -92,17 +96,40 @@ export const watchEffect = function (update) {
     // 立即执行，在这个过程中会自动收集依赖
     effect()
 }
+// watch可以监听ref、reactive对象和getter函数
+// 这里watch会立即执行，并深层监听
+// 监听返回响应式属性的getter函数，可以精确监听reactive的某个属性，而不是全部属性。
+// 但如果这个属性是对象，只有在返回不同的对象时，才会触发回调，也就是说非深层监听
+
 export const watch = function (dependency, cb) {
-    // 监测reactive对象
-    let oldObj = { ...dependency }
-    watchEffect(() => {
-        const newObj = dependency
-        // 比较变化
-        if (JSON.stringify(oldObj) !== JSON.stringify(newObj)) {
-            cb(newObj, oldObj)
-            oldObj = { ...newObj }
-        }
-    })
+    let oldValue
+    if (typeof dependency === 'function') {
+        // getter函数
+        oldValue = dependency()
+        watchEffect(() => {
+            const newValue = dependency()
+            if (oldValue !== newValue) {
+                cb(newValue, oldValue)
+                oldValue = newValue
+            }
+        })
+    } else {
+        // 深度拷贝对象
+        let oldClone = JSON.parse(JSON.stringify(dependency))
+        watchEffect(() => {
+            // 比较变化
+            if (JSON.stringify(oldClone) !== JSON.stringify(dependency)) {
+                // 如果是ref，返回value
+                if (dependency.value) {
+                    cb(dependency.value, oldClone?.value)
+                } else {
+                    cb(dependency, dependency)
+                }
+                oldClone = JSON.parse(JSON.stringify(dependency))
+            }
+        })
+    }
+
 }
 export const computed = function (cb) {
     const resRef = ref()

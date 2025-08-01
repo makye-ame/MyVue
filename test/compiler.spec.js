@@ -1,4 +1,4 @@
-import { parse, generate } from '../compiler.js';
+import { parse} from '../compiler.js';
 import { context, generateExcute } from './testUtil.js'
 import { describe, test, expect } from 'vitest'
 
