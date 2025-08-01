@@ -1,5 +1,6 @@
 // 建立源对象和代理之间的映射，避免重复代理
 const reactiveMap = new WeakMap()
+// reative代理对象，支持深层嵌套
 export const reactive = function (obj) {
     if (typeof obj !== 'object' || obj === null) {
         return obj // 非对象或 null 不需要代理
@@ -14,7 +15,7 @@ export const reactive = function (obj) {
             // 收集订阅者
             track(target, key)
             let value = target[key]
-            if (typeof value === 'object') {
+            if (typeof value === 'object') {                
                 return reactive(value)
             } else {
                 return value
@@ -32,6 +33,7 @@ export const reactive = function (obj) {
     reactiveMap.set(obj, proxy)
     return proxy
 }
+// ref的默认值可以是普通类型，也可以是对象，如果是对象，会再封装成reactie
 export const ref = function (defaultV) {
     const refObj = {
         get value() {

@@ -1,13 +1,22 @@
 import { reactive, ref, watchEffect, watch, computed } from '../src/libs/core.js';
 import { describe, test, expect } from 'vitest'
 describe('响应式系统', () => {
-    test('reactive 基础功能', () => {
+    test('reactive 代理对象', () => {
         const obj = reactive({ a: 1 });
         let dummy;
         watchEffect(() => (dummy = obj.a));
         expect(dummy).toBe(1);
         obj.a = 2;
         expect(dummy).toBe(2);
+    });
+    test('reactive 代理数组', () => {
+        const array = reactive([]);
+        let dummy = 0;
+        watchEffect(() => (dummy = array[array.length-1]));
+        array.push('zhangsan')
+        expect(dummy).toBe('zhangsan');
+        array.push('lisi')
+        expect(dummy).toBe('lisi');
     });
     test('reactive嵌套对象深层次响应式', () => {
         const obj = reactive({
@@ -90,13 +99,13 @@ describe('响应式系统', () => {
         watch(obj, (newVal) => (observed = newVal.level.count));
         obj.level.count = 5;
         expect(observed).toBe(5);
-    });   
+    });
     test('watch 监听getter函数', () => {
-        const obj = reactive({ level: 1,name:'zhangsan' });
+        const obj = reactive({ level: 1, name: 'zhangsan' });
         let observed = {};
-        watch(()=>obj.name, (newVal)=>observed.name = newVal);
+        watch(() => obj.name, (newVal) => observed.name = newVal);
         obj.name = 'lisi'
-        obj.level = 3;       
-        expect(observed).toEqual({name:'lisi'});
-    }); 
+        obj.level = 3;
+        expect(observed).toEqual({ name: 'lisi' });
+    });
 });
