@@ -283,4 +283,4 @@ countRef.value = 2
 ![执行结果图](../_media/reactive_computed.png)
 
 ## 最后
-这篇文章带大家一起简单模拟了下vue响应式各功能的代码实现，主要是为了理解vue响应式的原理，代码实现比较简单，没有考虑一些边界情况以及多类型场景。更详细的模拟代码请参考[vue 响应式原理](https://github.com/tangtang4321/MyVue/blob/main/src/libs/core.js)
+这篇文章带大家一起简单模拟了下vue响应式各功能的代码实现，主要是为了理解vue响应式的原理，代码实现比较简单，没有考虑一些边界情况以及多类型场景。更详细的模拟代码请参考[vue 响应式原理](https://github.com/makye-ame/MyVue/blob/main/src/libs/core.js)

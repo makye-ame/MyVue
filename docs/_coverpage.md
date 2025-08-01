@@ -10,6 +10,6 @@
 - 怎么把虚拟dom挂载到页面
 - 更新阶段diff对比探秘
 
-[GitHub](https://github.com/tangtang4321/MyVue)
+[GitHub](https://makye-ame.github.io/MyVue/)
 [Get Started](modules/vue响应式.md)
 
