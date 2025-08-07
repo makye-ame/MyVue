@@ -100,7 +100,7 @@ const mount = function ({instance,vnode, parentDom, insertIndex}) {
        // 2.挂载会作为响应式副作用执行，这样它会追踪其中所用到的所有响应式依赖。
       watchEffect(() => {
       // 3.根据render渲染函数生成Vnode
-      // 4.子组件实例与组件虚拟dom Vnode建立双向映射
+      // 4.子组件实例与组件虚拟dom Vnode建立映射
       // 5.触发beforeMount生命周期钩子
       // 6.执行子组件挂载操作
       // 7.触发mounted生命周期钩子
@@ -260,7 +260,7 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
         if (!instance.isMounted) {
             // 3.根据render渲染函数生成Vnode
             const vnode = instance.render(h.createVNode, h.createTextNode);
-            // 4.子组件实例与组件虚拟dom Vnode建立双向映射            
+            // 4.子组件实例与组件虚拟dom Vnode建立映射            
             instance.vnode = vnode;
             // 5.触发beforeMount生命周期钩子
             instance.beforeMount?.(instance);

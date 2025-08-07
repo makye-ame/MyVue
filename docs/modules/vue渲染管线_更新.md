@@ -184,7 +184,7 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
             })
 
         } else {
-            // 5. 如节点是组件节点，需要更新组件响应式props(响应式props更新后，会自动触发组件的更新)
+            // 3. 如节点是组件节点，需要更新组件响应式props(响应式props更新后，会自动触发组件的更新)
             // 属性只会有值变化，不会有新增和删减
             // 这里注意！！！！如果获取子组件的响应式props的属性，会被get劫持，从而父级的副作用会被设置成子级props的副作用了
             // 所以这里直接设置子组件的响应式props的属性即可，避免获取
@@ -194,9 +194,9 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
             })
         }
     }
-    // 3.设置vnode与dom或者组件的映射关系
+    // 4.设置vnode与dom或者组件的映射关系
     setVnodeDomMap({ vnode: VnodeTree, el: oldVnodeTree.el, component: oldVnodeTree.component })
-    // 4. 处理子节点
+    // 5. 处理子节点
     diffChildren(oldVnodeTree.childrens || [], VnodeTree.childrens || [], oldVnodeTree.el)
 }
 

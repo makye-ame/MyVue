@@ -92,7 +92,7 @@ const mount = function ({ instance, vnode, parentDom, insertIndex }) {
         // 2.挂载会作为响应式副作用执行，这样它会追踪其中所用到的所有响应式依赖。
         // watchEffect(() => {
         //     // 3.根据render渲染函数生成Vnode
-        //     // 4.子组件实例与组件虚拟dom Vnode建立双向映射
+        //     // 4.子组件实例与组件虚拟dom Vnode建立映射
         //     // 5.触发beforeMount生命周期钩子
         //     // 6.执行子组件挂载操作
         //     // 7.触发mounted生命周期钩子
@@ -114,7 +114,7 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
         if (!instance.isMounted) {
             // 3.根据render渲染函数生成Vnode
             const vnode = instance.render(h.createVNode, h.createTextNode);
-            // 4.子组件实例与组件虚拟dom Vnode建立双向映射            
+            // 4.子组件实例与组件虚拟dom Vnode建立映射            
             instance.vnode = vnode;
             // 5.触发beforeMount生命周期钩子
             instance.beforeMount?.(instance);
@@ -257,7 +257,7 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
             })
 
         } else {
-            // 5. 如节点是组件节点，需要更新组件响应式props(响应式props更新后，会自动触发组件的更新)
+            // 3. 如节点是组件节点，需要更新组件响应式props(响应式props更新后，会自动触发组件的更新)
             // 属性只会有值变化，不会有新增和删减
             // 这里注意！！！！如果获取子组件的响应式props的属性，会被get劫持，从而父级的副作用会被设置成子级props的副作用了
             // 所以这里直接设置子组件的响应式props的属性即可，避免获取
@@ -267,9 +267,9 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
             })
         }
     }
-    // 3.设置vnode与dom或者组件的映射关系
+    // 4.设置vnode与dom或者组件的映射关系
     setVnodeDomMap({ vnode: VnodeTree, el: oldVnodeTree.el, component: oldVnodeTree.component })
-    // 4. 处理子节点
+    // 5. 处理子节点
     diffChildren(oldVnodeTree.childrens || [], VnodeTree.childrens || [], oldVnodeTree.el)
 }
 
