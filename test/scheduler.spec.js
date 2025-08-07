@@ -137,40 +137,74 @@ describe('$nextTick 函数测试', () => {
 // describe('scheduler 兼容性测试', () => {
 //   // 测试无 Promise 但有 MutationObserver 的情况
 //   test('不支持 Promise 但支持 MutationObserver 时，应使用 MutationObserver', () => {
-//     // 移除 Promise
-//     vi.stubGlobal('Promise', undefined);
-//     // 模拟 MutationObserver
-//     const mockMutationObserver = vi.fn(() => ({
-//       observe: vi.fn(),
-//       disconnect: vi.fn()
-//     }));
-//     vi.stubGlobal('MutationObserver', mockMutationObserver);
-
-//     $nextTick(() => { });
-
-//     expect(mockMutationObserver).toHaveBeenCalled();
+//     // 保存原始对象
+//     const originalPromise = window.Promise;
+//     const originalMutationObserver = window.MutationObserver;
+    
+//     try {
+//       // 移除 Promise
+//       vi.stubGlobal('Promise', undefined);
+      
+//       // 模拟 MutationObserver（不依赖 Promise）
+//       let mockObserverCallback = null;
+//       const mockMutationObserver = vi.fn(function(callback) {
+//         mockObserverCallback = callback;
+//         return {
+//           observe: vi.fn(),
+//           disconnect: vi.fn()
+//         };
+//       });
+//       vi.stubGlobal('MutationObserver', mockMutationObserver);
+      
+//       let callbackExecuted = false;
+      
+//       // 调用 $nextTick
+//       $nextTick(() => {
+//         callbackExecuted = true;
+//       });
+      
+//       // 验证 MutationObserver 被调用
+//       expect(mockMutationObserver).toHaveBeenCalled();
+      
+//       // 此时回调应该还未执行
+//       expect(callbackExecuted).toBe(false);
+      
+//       // 手动触发 MutationObserver 回调
+//       if (mockObserverCallback) {
+//         // 模拟一个 mutation 记录
+//         const mutations = [{ type: 'characterData', target: {} }];
+//         mockObserverCallback(mutations, {});
+//       }
+      
+//       // 验证回调已执行
+//       expect(callbackExecuted).toBe(true);
+//     } finally {
+//       // 恢复原始对象
+//       vi.stubGlobal('Promise', originalPromise);
+//       vi.stubGlobal('MutationObserver', originalMutationObserver);
+//     }
 //   });
 
 //   // 测试无 Promise 和 MutationObserver 但有 setImmediate 的情况
-//   test('不支持 Promise 和 MutationObserver 但支持 setImmediate 时，应使用 setImmediate', () => {
-//     vi.stubGlobal('Promise', undefined);
-//     vi.stubGlobal('MutationObserver', undefined);
-//     const setImmediateSpy = vi.spyOn(window, 'setImmediate');
+//   // test('不支持 Promise 和 MutationObserver 但支持 setImmediate 时，应使用 setImmediate', () => {
+//   //   vi.stubGlobal('Promise', undefined);
+//   //   vi.stubGlobal('MutationObserver', undefined);
+//   //   const setImmediateSpy = vi.spyOn(window, 'setImmediate');
 
-//     $nextTick(() => { });
+//   //   $nextTick(() => { });
 
-//     expect(setImmediateSpy).toHaveBeenCalled();
-//   });
+//   //   expect(setImmediateSpy).toHaveBeenCalled();
+//   // });
 
-//   // 测试最低级别的降级：使用 setTimeout
-//   test('仅支持 setTimeout 时，应使用 setTimeout', () => {
-//     vi.stubGlobal('Promise', undefined);
-//     vi.stubGlobal('MutationObserver', undefined);
-//     vi.stubGlobal('setImmediate', undefined);
-//     const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
+//   // // 测试最低级别的降级：使用 setTimeout
+//   // test('仅支持 setTimeout 时，应使用 setTimeout', () => {
+//   //   vi.stubGlobal('Promise', undefined);
+//   //   vi.stubGlobal('MutationObserver', undefined);
+//   //   vi.stubGlobal('setImmediate', undefined);
+//   //   const setTimeoutSpy = vi.spyOn(window, 'setTimeout');
 
-//     $nextTick(() => { });
+//   //   $nextTick(() => { });
 
-//     expect(setTimeoutSpy).toHaveBeenCalled();
-//   });
+//   //   expect(setTimeoutSpy).toHaveBeenCalled();
+//   // });
 // });
