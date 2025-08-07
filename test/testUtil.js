@@ -1,6 +1,6 @@
-import { ref,watchEffect } from '../core.js'
-import { parse, generate } from '../compiler.js';
-import h from '../help.js'
+import { ref,watchEffect } from '../src/libs/core.js'
+import { parse, generate } from '../src/libs/compiler.js';
+import h from '../src/libs/help.js'
 const data = {
     message: '我是插值message',
     show: ref(true),

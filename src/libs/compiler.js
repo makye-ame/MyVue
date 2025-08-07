@@ -89,7 +89,6 @@ export const parse = function (template) {
             i = i + temp
         }
     }
-    console.log("parse：", root)
     return root
 }
 // 获取节点属性
@@ -140,7 +139,6 @@ const getAttributes = function (attrStr) {
 export const generate = function (ast) {
     // 递归处理ast
     const resultStr = digui(ast)
-    console.log("render函内容：",resultStr)
     const func = new Function('createVNode', 'createTextNode', `return ${resultStr}`)
     return func
 }

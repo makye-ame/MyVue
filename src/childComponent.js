@@ -4,7 +4,7 @@ const template = `
  <div style="color:blue">
    <h1> 我是子组件</h1>  
    <p>父组件num：{{num}}</p>
-   <button  @click="add">给父节点+{{num}}</button>   
+   <button id="childAdd" @click="add">给父节点+{{num}}</button>   
  </div>
  `
 export default {
@@ -36,5 +36,11 @@ export default {
   },
   created() {
     console.log('########child created')
+  },
+  beforeUnmount() {
+    console.log('########child BeforeUnmount')
+  },
+  unmounted() {
+    console.log('########child unmounted')
   },
 }

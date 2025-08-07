@@ -5,14 +5,12 @@ import ChildComponent from './childComponent.js'
 const template = `
   <div  :class="class1">
    <a href="https://www.baidu.com" target="_blank">我是静态节点1</a>
-   <div id="2" v-if="isShow"><p>我是静态节点2</p>  </div>
-  <button id="add" @click="add">add</button>
+   <div id="static2" v-if="isShow"><p>我是静态节点2</p>  </div>
+  <button id="add" @click="add(1)">add</button>
    <button id="hide" @click="hide">{{btnText}}</button>
    <ChildComponent    :num="num" @add="add"></ChildComponent>
     <a href="https://www.baidu.com" target="_blank">我是静态节点3</a>
-   <div id="4" v-if="isShow"><p>我是静态节点4</p>  </div>
-  
-   
+   <div id="static4" v-if="isShow"><p>我是静态节点4</p>  </div>   
  </div>
  `
 export default {
@@ -40,7 +38,7 @@ export default {
       })
       return isShow.value ? 'hide' : 'show'
     })
-    
+
     return {
       ChildComponent,
       isShow,
@@ -52,21 +50,27 @@ export default {
     }
   },
   mounted() {
-    console.log('########app mounted',Date.now())
+    console.log('########app mounted', Date.now())
   },
   beforeMount() {
-    console.log('########app beforeMount',Date.now())
+    console.log('########app beforeMount', Date.now())
   },
   updated() {
-    console.log('########app updated',Date.now())
+    console.log('########app updated', Date.now())
   },
   beforeUpdate() {
-    console.log('########app beforeUpdate',Date.now())
+    console.log('########app beforeUpdate', Date.now())
   },
   beforeCreate() {
     console.log('########app beforeCreate')
   },
   created() {
     console.log('########app created')
+  },
+  beforeUnmount() {
+    console.log('########app BeforeUnmount')
+  },
+  unmounted() {
+    console.log('########app unmounted')
   },
 }

@@ -1,4 +1,4 @@
-import { parse} from '../compiler.js';
+import { parse } from '../src/libs/compiler.js';
 import { context, generateExcute } from './testUtil.js'
 import { describe, test, expect } from 'vitest'
 
@@ -118,7 +118,7 @@ describe('模板编译器generate', () => {
         });
     });
     test('嵌套结构解析', async () => {
-
+        context.show.value = false
         const template = `<div><p v-if="show">{{ message }}</p><button  @click="hide">{{btnText}}</button><ChildComponent :num="num" @add="add"></ChildComponent></div>`
         const vnode = generateExcute(template)
         expect(vnode.childrens[0]).toEqual({
@@ -155,7 +155,7 @@ describe('模板编译器generate', () => {
             "component": null,
             "el": null,
         })
-        expect(vnode.childrens[0].childrens[1].childrens).toEqual(['hide'])
+        expect(vnodeNew.childrens[0].childrens[1].childrens).toEqual(['hide'])
     });
 });
 

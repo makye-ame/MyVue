@@ -58,8 +58,17 @@ const batchDealTasks = function () {
   // 微任务已经执行，hasMicroTask重置为false
   hasMicroTask = false
 }
+// 接收一个回调函数
+// 返回一个promise
 export const $nextTick = function (cb) {
-  createMicroTask(cb, null)
+  return new Promise(resolve => {
+    createMicroTask(() => {
+      if (cb) {
+        cb()
+      }
+      resolve()
+    }, null)
+  })
 }
 export const $domUpdate = function (instance) {
   createMicroTask(null, instance)

@@ -88,8 +88,33 @@ const batchDealTasks = function () {
   // 微任务已经执行，hasMicroTask重置为false
   hasMicroTask = false
 }
+// 接收一个回调函数
+// 返回一个promise
 export const $nextTick = function (cb) {
-  createMicroTask(cb, null)
+  // 检查Promise是否可用
+  if (typeof Promise !== 'undefined') {
+    return new Promise(resolve => {
+      createMicroTask(() => {
+        if (cb) {
+          cb()
+        }
+        resolve()
+      }, null)
+    })
+  } else {
+    // Promise不可用时的降级处理
+    return {
+      then: function(callback) {
+        createMicroTask(() => {
+          if (cb) {
+            cb()
+          }
+          callback()
+        }, null)
+        return this
+      }
+    }
+  }
 }
 export const $domUpdate = function (instance) {
   createMicroTask(null, instance)

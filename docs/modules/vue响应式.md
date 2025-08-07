@@ -52,9 +52,13 @@ export const reactive = function (obj) {
             }
         },
         set(target, key, value) {
-            target[key] = value
-            // 触发更新
-            trigger(target, key)
+            // 判断新旧值不等
+            // 但是如果是数组添加删除元素，会触发length的更改，而新旧值一定相等，所以特殊处理下
+            if (target[key] !== value || key === 'length') {
+                target[key] = value
+                // 触发更新
+                trigger(target, key)
+            }
             // set必须设置返回
             return true
         },
@@ -162,9 +166,11 @@ export const ref = function (defaultV) {
                 return defaultV
             }
         },
-        set value(v) {
-            defaultV = v
-            trigger(this, 'value')
+        set value(v) {            
+            if (defaultV !== v) {
+                defaultV = v
+                trigger(this, 'value')
+            }
         },
     }
     return refObj

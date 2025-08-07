@@ -79,6 +79,7 @@ export const createApp = function (component) {
         // 9.更改组件的挂载状态
      })
   }
+  // 提供unmount方法
 }
 ```
 **重点**：
@@ -143,14 +144,14 @@ const createDomDuiGui = function({ instance,vnode, parentDom, insertIndex }) {
 ```
 ## 代码实现
 ```js
-import h from './help'
-import { parse, generate } from './compiler'
-import { watchEffect, reactive } from './core'
+import h from './help.js'
+import { parse, generate } from './compiler.js'
+import { watchEffect, reactive } from './core.js'
+import { $domUpdate } from './scheduler.js'
 // 参数1:组件配置对象component
 // 参数2:组件节点的props属性
 // 参数3:父组件实例_instance
-
-const createComponentIntance = function (component, props, _instance) {
+const createComponentIntance = function (component, props = {}, _instance) {
     // 1.触发beforeCreate事件钩子
     if (component.beforeCreate) component.beforeCreate()
     // 2.根据template获取render函数
@@ -175,7 +176,7 @@ const createComponentIntance = function (component, props, _instance) {
             }
         },
     }
-    const context = setup(reactiveProps, ctx)
+    const context = setup?.(reactiveProps, ctx) || {}
     // 5.把响应式props挂载到context，方便模板中直接访问props中的数据
     context.props = reactiveProps
     // 6.绑定render函数执行的上下文context
@@ -195,7 +196,6 @@ const createComponentIntance = function (component, props, _instance) {
     // 10.返回实例 
     return instance
 }
-
 // 提供createApp方法创建应用实例
 // 接收组件配置对象作为参数
 export const createApp = function (component) {
@@ -205,8 +205,20 @@ export const createApp = function (component) {
     instance.mount = function (selector) {
         const parentDom = document.querySelector(selector)
         // 3.挂载会作为响应式副作用执行，这样它会追踪其中所用到的所有响应式依赖。
-
         commonMount({ instance, parentDom })
+
+    }
+    // 4.提供unmount方法
+    instance.unmount = function () {
+        if (instance.isMounted) {
+            // 触发app的beforeUnmount事件
+            instance.beforeUnmount?.()
+            const rootDom = instance.vnode.el.parentElement;
+            removeDomByVnode(instance.vnode, rootDom);
+            instance.isMounted = false;
+            // 触发app的unmounted事件
+            instance.unmounted?.()
+        }
 
     }
     return instance
@@ -218,10 +230,11 @@ export const createApp = function (component) {
 const mount = function ({ instance, vnode, parentDom, insertIndex }) {
     // 如果当前虚拟dom是组件
     if (typeof vnode.tag === 'object') {
-        // 1.创建子组件实例,节点的el属性指向组件实例
+        
+        // 1.创建子组件实例,节点的component属性指向组件实例
         const childIntance = createComponentIntance(vnode.tag, vnode.props, instance)
 
-        vnode.el = childIntance
+        vnode.component = childIntance
         // 2.挂载会作为响应式副作用执行，这样它会追踪其中所用到的所有响应式依赖。
         // watchEffect(() => {
         //     // 3.根据render渲染函数生成Vnode
@@ -247,8 +260,7 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
         if (!instance.isMounted) {
             // 3.根据render渲染函数生成Vnode
             const vnode = instance.render(h.createVNode, h.createTextNode);
-            // 4.子组件实例与组件虚拟dom Vnode建立双向映射
-            vnode.component = instance;
+            // 4.子组件实例与组件虚拟dom Vnode建立双向映射            
             instance.vnode = vnode;
             // 5.触发beforeMount生命周期钩子
             instance.beforeMount?.(instance);
@@ -261,7 +273,8 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
         } else {
             // update
             console.log("监测到更新", instance.name)
-            update(instance)
+            //update(instance)
+            $domUpdate(instance)
         }
     })
 }
@@ -271,8 +284,11 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
 // 参数insertIndex：插入位置，指定要挂载的位置，可选参数，不传则挂载在末尾
 const createDomDuiGui = function ({ instance, vnode, parentDom, insertIndex }) {
     if (!vnode) return
+    let dom
     // 1.创建真实dom
-    const dom = document.createElement(vnode.tag)
+    dom = document.createElement(vnode.tag)
+    // 虚拟节点与真实节点建立映射
+    vnode.el = dom
     // 设置dom属性
     for (let k in vnode.props) {
         const v = vnode.props[k]
@@ -293,26 +309,51 @@ const createDomDuiGui = function ({ instance, vnode, parentDom, insertIndex }) {
             dom.setAttribute(k, v)
         }
     }
-    // 虚拟节点与真实节点建立映射
-    vnode.el = dom
+
     // 2.递归处理dom的子节点挂载
     vnode?.childrens?.forEach((child, key) => {
         if (typeof child !== 'object') {
-            // 普通文本
-            dom.innerText += child
-        } else if (child.tag) {
+            // 普通文本           
+            dom.textContent += child
+        } else if (child.tag || child.mount) {
             // 处理子节点的挂载
             mount({ instance, vnode: child, parentDom: dom, insertIndex: key })
         } else {
-            dom.innerText += JSON.stringify(child)
+            dom.textContent += JSON.stringify(child)
         }
     })
+
     // 3.插入dom
     if (typeof insertIndex !== 'number' || insertIndex >= parentDom.childNodes.length) {
         parentDom.appendChild(dom)
     } else {
         const refNode = parentDom.childNodes[insertIndex]
         parentDom.insertBefore(dom, refNode)
+    }
+}
+// 根据虚拟节点移除真实dom
+function removeDomByVnode(vnode, parentDom) {
+    // 1. 如果是组件，触发 beforeUnmount 钩子
+    if (vnode.component) {
+        vnode.component.beforeUnmount?.();
+    }
+
+    // 2. 递归处理子组件
+    if (vnode.childrens && vnode.childrens.length > 0) {
+        vnode.childrens.forEach(child => {
+            if (typeof child === 'object') {
+                removeDomByVnode(child, vnode.el || parentDom);
+            }
+        });
+    }
+
+    // 3. 移除当前节点
+    const dom = vnode.el || vnode.component?.vnode?.el;
+    parentDom.removeChild(dom);
+
+    // 4. 触发 unmounted 钩子
+    if (vnode.component) {
+        vnode.component.unmounted?.();
     }
 }
 ```

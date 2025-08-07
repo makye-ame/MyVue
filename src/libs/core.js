@@ -15,16 +15,20 @@ export const reactive = function (obj) {
             // 收集订阅者
             track(target, key)
             let value = target[key]
-            if (typeof value === 'object') {                
+            if (typeof value === 'object') {
                 return reactive(value)
             } else {
                 return value
             }
         },
         set(target, key, value) {
-            target[key] = value
-            // 触发更新
-            trigger(target, key)
+            // 判断新旧值不等
+            // 但是如果是数组添加删除元素，会触发length的更改，而新旧值一定相等，所以特殊处理下
+            if (target[key] !== value || key === 'length') {
+                target[key] = value
+                // 触发更新
+                trigger(target, key)
+            }
             // set必须设置返回
             return true
         },
@@ -44,9 +48,11 @@ export const ref = function (defaultV) {
                 return defaultV
             }
         },
-        set value(v) {
-            defaultV = v
-            trigger(this, 'value')
+        set value(v) {            
+            if (defaultV !== v) {
+                defaultV = v
+                trigger(this, 'value')
+            }
         },
     }
     return refObj
@@ -56,6 +62,7 @@ let currentEffect = null
 
 // 收集订阅者
 const track = function (target, key) {
+
     if (!currentEffect) return
     // 获取现有的订阅者
     const listeners = getListeners(target, key)
@@ -143,33 +150,3 @@ export const computed = function (cb) {
     effect()
     return resRef
 }
-
-// test...
-// test
-//const obj = reactive({ name: 'zhangsan', age: 18 })
-// watchEffect(() => {
-//     console.log('最新年龄是：', obj.age)
-// })
-// watch(obj, () => {
-//     console.log('最新年龄是：', obj.age)
-// })
-// obj.age = 19
-// obj.age = 20
-// const countRef = ref(0)
-// // watchEffect(() => {
-// //     console.log('计数器最新值：', countRef.value)
-// // })
-// const computedRef = computed(() => {
-//     return countRef.value + 1
-// })
-// watch(computedRef, () => {
-//     console.log('计数属性最新值：', computedRef.value)
-// })
-// countRef.value = 1
-// countRef.value = 2
-// const countRef = ref(0)
-// watchEffect(() => {
-//     console.log('计数器最新值：', countRef.value)
-// })
-// countRef.value = 1
-// countRef.value = 2
