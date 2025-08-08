@@ -150,8 +150,13 @@ function digui(obj) {
         case TYPE.ROOT:
         case TYPE.ELEMENT:
             // 拼接子节点字符串
-            let childStr = obj?.children?.map((child, i) => digui(child, i)).join(', ')
-            childStr = childStr ? `[${childStr}]` : '[]'
+            let childStr = obj.children?.length > 0
+                ? obj.children.map((child) => digui(child)).join(', ')
+                : '[]';
+            const isAlreadyArray = /^this\..*\.map/.test(childStr) || childStr.startsWith('[');
+            if (!isAlreadyArray) {
+                childStr = `[${childStr}]`
+            }
             // 拼接属性字符串
             // 指令处理
             // 获取属性字符串
@@ -164,6 +169,26 @@ function digui(obj) {
                 const v = getExpStr(obj.attrs['v-if'].exp)
                 // 如果值为true才创建虚拟dom，否则返回空字符
                 str += `(${v}) ? createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag}) : ''`
+            } else if (obj.attrs?.hasOwnProperty('v-for')) {
+                // 增加v-for指令的处理
+                const v = obj.attrs['v-for'].exp;
+                const exp = /(.+) in (\w+)/;
+                const match = v.match(exp);
+
+                if (!match || match.length < 3) {
+                    throw new Error('v-for 表达式格式不正确，应为 "item in items"');
+                }
+
+                const [_, alias, source] = match;
+                const keyExp = obj.attrs['key']?.exp || 'item';
+
+                // v-for 生成的 childStr 是一个数组表达式
+                const tagStr = getTag(obj.tag)
+                const vforStr = `this.${source}?.map((${alias}) => {
+                    return createVNode(${tagStr}, { key: ${keyExp} }, ${childStr})
+                })`;
+
+                str += vforStr;
             } else {
                 // 无指令的普通情况
                 str += `createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag})`
@@ -182,7 +207,7 @@ function digui(obj) {
 const getPropsStr = function (obj) {
     const attrs = obj?.attrs
     if (!attrs) return
-    let returnStr = ''    
+    let returnStr = ''
     Object.values(attrs).forEach((attr) => {
         if (!attr.name) return
         // 属性
@@ -219,12 +244,15 @@ const getPropsStr = function (obj) {
 }
 // 获取动态值的字符串
 const getExpStr = function (exp) {
-    // 从当前作用域下取值，考虑值为ref的情况
+    // 这里是最简单的模拟，没有考虑过多
+    // 当前环境下直接取值，v-for会开启新的块作用域    
+    const currentExp = `(typeof ${exp} !== 'undefined' ? ${exp} : undefined)`
+    // 从当前上下文中取值，考虑值为ref的情况
     const thisExp = `(this.${exp}?.value ?? this.${exp})`;
     // 从props里取值,在vue里，会把props封装成reactive对象
     const propExp = `(this.props?.${exp})`
     // 优先取当前作用域下的值，最后是props的值    
-    return `(${thisExp} ?? ${propExp})`;
+    return `(${currentExp} ?? ${thisExp} ?? ${propExp})`;
 }
 
 // 获取tag字符串

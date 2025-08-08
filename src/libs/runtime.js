@@ -126,7 +126,7 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
             instance.isMounted = true
         } else {
             // update
-            console.log("监测到更新", instance.name)
+            //console.log("监测到更新", instance.name)
             //update(instance)
             $domUpdate(instance)
         }
