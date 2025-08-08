@@ -1,4 +1,5 @@
 
+import h from './help.js'
 const TYPE = {
     ROOT: 'root',
     ELEMENT: 'element',  // 元素
@@ -133,73 +134,218 @@ const getAttributes = function (attrStr) {
     }
     return resultObj
 }
+// 二.transform转化
+export const tranform = function (ast) {
+    // 更新类型标记
+    markPatchFlag(ast)
+    staticNodeCache(ast)
+    console.log("优化后的ast:", ast)
+}
+export const PatchFlags = {
+    // 特殊标记：静态提升节点
+    HOISTED: -1,
+    // 0b00000001 - 动态文本内容（如{{ msg }}）
+    TEXT: 1,
+    // 0b00000010 - 动态class绑定（如:class="{ active }"）
+    CLASS: 1 << 1,    // 2
+    // 0b00000100 - 动态style绑定（如:style="styles"）
+    STYLE: 1 << 2,    // 4
+    // 0b00001000 - 动态props（非class/style的普通属性）
+    PROPS: 1 << 3,   // 8
+    // 0b10000 -动态子节点
+    CHILDREN: 1 << 4,    //16
+    // 0b100000 动态事件
+    HYDRATE_EVENTS: 1 << 5,  //32
+    // 0b1000000 动态指令
+    DYNAMIC_DIRECTIVES: 1 << 6  //64
+    // ...
+}
+const markPatchFlag = function (ast) {
+    // 如果节点类型是元素
+    if (ast.type === TYPE.ELEMENT) {
+        ast.patchFlag = 0
+        for (let key in ast.attrs) {
+            const value = ast.attrs[key]
+            // 动态事件
+            if (value.function) {
+                ast.patchFlag |= PatchFlags.HYDRATE_EVENTS
+            }
+            if (value.exp) {
+                // 动态指令
+                if (value.type === TYPE.DIRECTIVE) {
+                    ast.patchFlag |= PatchFlags.DYNAMIC_DIRECTIVES
+                } else if (value.type === TYPE.ATTRIBUTE) {
+                    // 动态class
+                    if (value.name === 'class') {
+                        ast.patchFlag |= PatchFlags.CLASS
+                    } else if (value.name === 'style') {
+                        // 动态样式
+                        ast.patchFlag |= PatchFlags.STYLE
+                    } else {
+                        // 动态属性
+                        ast.patchFlag |= PatchFlags.PROPS
+                        // 收集动态属性
+                        if (!ast.dynamicProps) {
+                            ast.dynamicProps = []
+                        }
+                        ast.dynamicProps.push(key)
+                    }
 
+                }
+            }
+        }
+    } else if (ast.type === TYPE.INTERPOLATION) {
+        // 动态文本
+        ast.parent.patchFlag |= PatchFlags.TEXT
+    }
+    // 处理子节点
+    ast.children?.forEach((child) => {
+        const childPathcFlag = markPatchFlag(child)
+        if (childPathcFlag && childPathcFlag !== PatchFlags.HOISTED) {
+            ast.patchFlag |= PatchFlags.CHILDREN
+        }
+    })
+    // 该节点为静态节点
+    if (ast.patchFlag === 0) {
+        ast.patchFlag = PatchFlags.HOISTED
+        ast.isDynamic = false
+    } else if (ast.patchFlag) {
+        ast.isDynamic = true
+    }
+    return ast.patchFlag
+}
+// 静态节点缓存列表
+let hoistedList = []
+const staticNodeCache = function (ast) {
+    // 判断是否是静态节点
+    if (!ast.isDynamic && ast.patchFlag === PatchFlags.HOISTED) {
+        ast.isStatic = true
+        hoistedList.push(serializeNode(ast))
+        // 缓存静态节点的索引,这样静态节点和变量才可以关联起来
+        ast.hoistedIndex = hoistedList.length - 1
+    } else if (ast.children && ast.children.length > 0) {
+        // 递归处理子节点
+        ast.children.forEach((child) => {
+            staticNodeCache(child)
+        })
+    }
+}
+// 将静态节点序列化为模板字符串
+const serializeNode = function (ast) {
+    // 文本节点直接返回
+    if (ast.type === TYPE.TEXT) {
+        return ast.value
+    }
+    // 处理属性
+    const propsArray = []
+    for (let k in ast.attrs) {
+        const v = ast.attrs[k]?.value
+        propsArray.push(`${k} = "${v}"`)
+    }
+    const propsStr = propsArray.join(" ")
+    if (ast.isCloseSelf) {
+        return `<${ast.tag} ${propsStr}/>`
+    } else {
+        // 处理子节点
+        let childrenArray, childrenStr = ''
+        if (ast.children) {
+            childrenArray = ast.children.map((child) => {
+                return serializeNode(child)
+            })
+            childrenStr = childrenArray.join("")
+        }
+        return `<${ast.tag} ${propsStr}>${childrenStr}</${ast.tag}>`
+    }
+}
 
 // 三.生成render函数
 export const generate = function (ast) {
+    // 生成静态节点变量声明
+    const hoistedDeclarations = hoistedList.map((item, i) => {
+        return `const _hoisted_${i} = createStaticNode('${item}')`
+    }).join(';\n')
+    // 重置静态节点列表
+    hoistedList = []
     // 递归处理ast
     const resultStr = digui(ast)
-    const func = new Function('createVNode', 'createTextNode', `return ${resultStr}`)
-    return func
+    // 把字符串转成真实的函数
+    // 把变量提取到render函数之外
+    // 这里的render函数写法要注意不要用箭头函数，不然上下文this会有问题
+    const funcStr = `
+        ${hoistedDeclarations}
+        const render = function(){
+           return ${resultStr}
+        }
+        return render
+    `
+    const func = new Function('createVNode', 'createTextNode', 'createStaticNode', funcStr)
+    const renderFunc = func(h.createVNode, h.createTextNode, h.createStaticNode)
+    console.log("render函数：", renderFunc)
+    return renderFunc
 }
 function digui(obj) {
     let str = ''
-    // 对于不同的type，处理逻辑不同，文本和插槽比较简单，创建一个文本虚拟dom即可；
-    // ELEMENT比较复杂，需要拼接子节点字符串，属性字符串，而属性还包括指令的处理(这里只简单模拟v-if)再创建一个元素虚拟dom
-    switch (obj.type) {
-        case TYPE.ROOT:
-        case TYPE.ELEMENT:
-            // 拼接子节点字符串
-            let childStr = obj.children?.length > 0
-                ? obj.children.map((child) => digui(child)).join(', ')
-                : '[]';
-            const isAlreadyArray = /^this\..*\.map/.test(childStr) || childStr.startsWith('[');
-            if (!isAlreadyArray) {
-                childStr = `[${childStr}]`
-            }
-            // 拼接属性字符串
-            // 指令处理
-            // 获取属性字符串
-            const attrsStr = getPropsStr(obj)
-            // 获取tag字符串
-            const tagStr = getTag(obj.tag)
-            if (obj.attrs?.['v-if']) {
-                // v-if指令 
-                // 获取指令的值
-                const v = getExpStr(obj.attrs['v-if'].exp)
-                // 如果值为true才创建虚拟dom，否则返回空字符
-                str += `(${v}) ? createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag}) : ''`
-            } else if (obj.attrs?.hasOwnProperty('v-for')) {
-                // 增加v-for指令的处理
-                const v = obj.attrs['v-for'].exp;
-                const exp = /(.+) in (\w+)/;
-                const match = v.match(exp);
-
-                if (!match || match.length < 3) {
-                    throw new Error('v-for 表达式格式不正确，应为 "item in items"');
+    if (obj.isStatic) {
+        // 根据索引得到变量名
+        str += `_hoisted_${obj.hoistedIndex}`
+    } else {
+        // 对于不同的type，处理逻辑不同，文本和插槽比较简单，创建一个文本虚拟dom即可；
+        // ELEMENT比较复杂，需要拼接子节点字符串，属性字符串，而属性还包括指令的处理(这里只简单模拟v-if)再创建一个元素虚拟dom
+        switch (obj.type) {
+            case TYPE.ROOT:
+            case TYPE.ELEMENT:
+                // 拼接子节点字符串
+                let childStr = obj.children?.length > 0
+                    ? obj.children.map((child) => digui(child)).join(', ')
+                    : '[]';
+                const isAlreadyArray = /^this\..*\.map/.test(childStr) || childStr.startsWith('[');
+                if (!isAlreadyArray) {
+                    childStr = `[${childStr}]`
                 }
-
-                const [_, alias, source] = match;
-                const keyExp = obj.attrs['key']?.exp || 'item';
-
-                // v-for 生成的 childStr 是一个数组表达式
+                // 拼接属性字符串
+                // 指令处理
+                // 获取属性字符串
+                const attrsStr = getPropsStr(obj)
+                // 获取tag字符串
                 const tagStr = getTag(obj.tag)
-                const vforStr = `this.${source}?.map((${alias}) => {
-                    return createVNode(${tagStr}, { key: ${keyExp} }, ${childStr})
+                if (obj.attrs?.['v-if']) {
+                    // v-if指令 
+                    // 获取指令的值
+                    const v = getExpStr(obj.attrs['v-if'].exp)
+                    // 如果值为true才创建虚拟dom，否则返回空字符
+                    str += `(${v}) ? createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag}) : ''`
+                } else if (obj.attrs?.hasOwnProperty('v-for')) {
+                    // 增加v-for指令的处理
+                    const v = obj.attrs['v-for'].exp;
+                    const exp = /(.+) in (\w+)/;
+                    const match = v.match(exp);
+
+                    if (!match || match.length < 3) {
+                        throw new Error('v-for 表达式格式不正确，应为 "item in items"');
+                    }
+
+                    const [_, alias, source] = match;
+                    const keyExp = obj.attrs['key']?.exp || 'item';
+
+                    // v-for 生成的 childStr 是一个数组表达式
+                    const tagStr = getTag(obj.tag)
+                    const vforStr = `this.${source}?.map((${alias}) => {
+                    return createVNode(${tagStr}, { key: ${keyExp} }, ${childStr},${obj.patchFlag})
                 })`;
 
-                str += vforStr;
-            } else {
-                // 无指令的普通情况
-                str += `createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag})`
-            }
-            break;
-        case TYPE.TEXT:
-            str += `createTextNode('${obj.value}')`
-            break;
-        case TYPE.INTERPOLATION:
-            str += `createTextNode(${getExpStr(obj.exp)})`
-            break;
+                    str += vforStr;
+                } else {
+                    // 无指令的普通情况
+                    str += `createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag})`
+                }
+                break;
+            case TYPE.TEXT:
+                str += `createTextNode('${obj.value}')`
+                break;
+            case TYPE.INTERPOLATION:
+                str += `createTextNode(${getExpStr(obj.exp)})`
+                break;
+        }
     }
     return str
 }
@@ -208,6 +354,10 @@ const getPropsStr = function (obj) {
     const attrs = obj?.attrs
     if (!attrs) return
     let returnStr = ''
+    // 动态属性处理
+    if (obj.dynamicProps?.length > 0) {
+        returnStr += `$dynamicProps:${JSON.stringify(obj.dynamicProps)},`
+    }
     Object.values(attrs).forEach((attr) => {
         if (!attr.name) return
         // 属性
@@ -228,9 +378,9 @@ const getPropsStr = function (obj) {
                 // 参数的最后追加event
                 args = args ? `${args},event` : 'event'
                 const funName = match?.[1]
-                returnStr += `${attr.name}:(event)=>${getExpStr(funName)}(${args}),`
+                returnStr += `${attr.name}:(event)=>this.${funName}(${args}),`
             } else {
-                returnStr += `${attr.name}:${getExpStr(attr.function)},`
+                returnStr += `${attr.name}:this.${attr.function},`
             }
         } else {
             // 其他指令 暂不模拟

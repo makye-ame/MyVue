@@ -1,7 +1,7 @@
 import h from './help.js'
-import { parse, generate } from './compiler.js'
+import { parse, generate, tranform, PatchFlags } from './compiler.js'
 import { watchEffect, reactive } from './core.js'
-import { $domUpdate,$nextTick } from './scheduler.js'
+import { $domUpdate, $nextTick } from './scheduler.js'
 // 参数1:组件配置对象component
 // 参数2:组件节点的props属性
 // 参数3:父组件实例_instance
@@ -14,6 +14,8 @@ const createComponentIntance = function (component, props = {}, _instance) {
     // 编译模板
     if (!render && template) {
         const ast = parse(template)
+        // 转化ast，进行优化操作
+        tranform(ast)
         renderFun = generate(ast)
     }
     // 3.包装props为响应式
@@ -84,7 +86,7 @@ export const createApp = function (component) {
 const mount = function ({ instance, vnode, parentDom, insertIndex }) {
     // 如果当前虚拟dom是组件
     if (typeof vnode.tag === 'object') {
-        
+
         // 1.创建子组件实例,节点的component属性指向组件实例
         const childIntance = createComponentIntance(vnode.tag, vnode.props, instance)
 
@@ -113,7 +115,7 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
         // 判定实例状态，如果未挂载，则进行挂载操作，已挂载则进行更新
         if (!instance.isMounted) {
             // 3.根据render渲染函数生成Vnode
-            const vnode = instance.render(h.createVNode, h.createTextNode);
+            const vnode = instance.render();
             // 4.子组件实例与组件虚拟dom Vnode建立映射            
             instance.vnode = vnode;
             // 5.触发beforeMount生命周期钩子
@@ -139,44 +141,49 @@ const commonMount = function ({ instance, parentDom, insertIndex }) {
 const createDomDuiGui = function ({ instance, vnode, parentDom, insertIndex }) {
     if (!vnode) return
     let dom
-    // 1.创建真实dom
-    dom = document.createElement(vnode.tag)
+    // 如果是静态节点
+    if (vnode.isStatic) {
+        dom = vnode.mount()
+    } else {
+        // 1.创建真实dom
+        dom = document.createElement(vnode.tag)
+
+        // 设置dom属性
+        for (let k in vnode.props) {
+            const v = vnode.props[k]
+            if (k === 'style') {
+                // style属性值支持字符串和对象
+                if (typeof v === 'object') {
+                    for (let styleK in v) {
+                        dom.style[styleK] = v[styleK]
+                    }
+                } else {
+                    dom.style = v
+                }
+            } else if (k.startsWith('on')) {
+                // 事件
+
+                dom.addEventListener(k.slice(2), v)
+            } else {
+                dom.setAttribute(k, v)
+            }
+        }
+
+        // 2.递归处理dom的子节点挂载
+        vnode?.childrens?.forEach((child, key) => {
+            if (typeof child !== 'object') {
+                // 普通文本           
+                dom.textContent += child
+            } else if (child.tag || child.mount) {
+                // 处理子节点的挂载
+                mount({ instance, vnode: child, parentDom: dom, insertIndex: key })
+            } else {
+                dom.textContent += JSON.stringify(child)
+            }
+        })
+    }
     // 虚拟节点与真实节点建立映射
     vnode.el = dom
-    // 设置dom属性
-    for (let k in vnode.props) {
-        const v = vnode.props[k]
-        if (k === 'style') {
-            // style属性值支持字符串和对象
-            if (typeof v === 'object') {
-                for (let styleK in v) {
-                    dom.style[styleK] = v[styleK]
-                }
-            } else {
-                dom.style = v
-            }
-        } else if (k.startsWith('on')) {
-            // 事件
-
-            dom.addEventListener(k.slice(2), v)
-        } else {
-            dom.setAttribute(k, v)
-        }
-    }
-
-    // 2.递归处理dom的子节点挂载
-    vnode?.childrens?.forEach((child, key) => {
-        if (typeof child !== 'object') {
-            // 普通文本           
-            dom.textContent += child
-        } else if (child.tag || child.mount) {
-            // 处理子节点的挂载
-            mount({ instance, vnode: child, parentDom: dom, insertIndex: key })
-        } else {
-            dom.textContent += JSON.stringify(child)
-        }
-    })
-
     // 3.插入dom
     if (typeof insertIndex !== 'number' || insertIndex >= parentDom.childNodes.length) {
         parentDom.appendChild(dom)
@@ -184,6 +191,8 @@ const createDomDuiGui = function ({ instance, vnode, parentDom, insertIndex }) {
         const refNode = parentDom.childNodes[insertIndex]
         parentDom.insertBefore(dom, refNode)
     }
+
+
 }
 // 更新阶段
 // 参数1:组件实例对象componentInstance
@@ -193,7 +202,7 @@ export const update = function (componentInstance) {
     // 2.获取旧的vnode树
     const oldVnode = componentInstance.vnode
     // 3.根据render函数获取新vnode树
-    const newVnode = componentInstance.render(h.createVNode, h.createTextNode)
+    const newVnode = componentInstance.render()
     // 4.diff对比新旧节点，实现更新
     diff(oldVnode, newVnode)
     // 5.更新组件vnode树
@@ -210,7 +219,7 @@ const isSameVNodeType = (v1, v2) => {
 // 参数2:新的Vnode树
 // 参数3:父节点
 // 参数4:在父节点中插入的位置
-const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
+const diffOld = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
     // 节点相同不需要对比，直接返回
     if (oldVnodeTree === VnodeTree) return
     // 旧节点为文本节点，只是字符串
@@ -272,7 +281,85 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
     // 5. 处理子节点
     diffChildren(oldVnodeTree.childrens || [], VnodeTree.childrens || [], oldVnodeTree.el)
 }
+// 对比更新
+// 参数1:旧的Vnode树
+// 参数2:新的Vnode树
+// 参数3:父节点
+// 参数4:在父节点中插入的位置
+const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
+    // 节点相同不需要对比，直接返回
+    // 静态节点用的缓存节点，所以新旧节点一定是相等的
+    if (oldVnodeTree === VnodeTree) {
+        if (oldVnodeTree.isStatic) {
+            console.log("跳过静态节点对比")
+        } else {
+            console.log("其他节点相同情况")
+        }
+        return
+    }
+    if (!isSameVNodeType(oldVnodeTree, VnodeTree)) {
+        // 1. 如果节点不是同类型，直接删除创建新节点
+        // 删除旧节点
+        (parentDom || dom.parentElement).removeChild(dom)
+        // 创建新节点
+        mount({ vnode: VnodeTree, parentDom, insertIndex })
+        return
+    } else {
+        const dom = oldVnodeTree.el
+        const reativeProps = oldVnodeTree?.component?.props  // 如果此时el指向组件实例
+        // 动态文本
+        if (oldVnodeTree.patchFlag & PatchFlags.TEXT) {
+            const newText = VnodeTree.childrens.join("")
+            const oldText = oldVnodeTree.childrens.join("")
+            if (oldText !== newText) {
+                dom.innerText = newText
+            }
+           
+        }
+        // dom属性有更新
+        const oldProps = oldVnodeTree.props       
+        const newProps = VnodeTree.props
+        // 动态class
+        if (oldVnodeTree.patchFlag & PatchFlags.CLASS) {
+            if (oldProps.class !== newProps.class) {
+                typeof VnodeTree.tag === 'object' ? reativeProps.class = newProps.class : dom.setAttribute('class', newProps.class)
+            }
+        }
+        // 动态样式
+        if (oldVnodeTree.patchFlag & PatchFlags.STYLE) {
+            const newStyle = VnodeTree.props.style
+            for (let styleK in newStyle) {
+                if (dom.style[styleK] !== newStyle[styleK]) {
+                    typeof VnodeTree.tag === 'object' ? (reativeProps.style[styleK] = newStyle[styleK]) : (dom.style[styleK] = newStyle[styleK])
+                }
+            }
+        }
+        // 动态属性
+        if (oldVnodeTree.patchFlag & PatchFlags.PROPS) {
+            // 只遍历动态属性，非动态的不处理
+            const dynamicProps = oldVnodeTree.$dynamicProps
+            dynamicProps.forEach((k) => {
+                if (oldProps[k] !== newProps[k]) {
+                    const v = newProps[k]
+                    typeof VnodeTree.tag === 'object' ? (reativeProps[k] = v) : dom.setAttribute(k, v)
+                }
+            })
+        }
+        if (oldVnodeTree.patchFlag & PatchFlags.HYDRATE_EVENTS) {
+            // 在目前我们模拟的情况下，事件处理函数不会变化，所以这里暂不写逻辑
+        }
+        if (oldVnodeTree.patchFlag & PatchFlags.DYNAMIC_DIRECTIVES) {
+            // 在目前我们模拟的情况下，只实现了v-if指令，这个指令的逻辑在generate时就处理过了，所以这里暂不写逻辑
+        }
+        // 设置vnode与dom或者组件的映射关系
+        setVnodeDomMap({ vnode: VnodeTree, el: oldVnodeTree.el, component: oldVnodeTree.component })
+        // 处理子节点
+        if (oldVnodeTree.patchFlag & PatchFlags.CHILDREN) {
+            diffChildren(oldVnodeTree.childrens || [], VnodeTree.childrens || [], oldVnodeTree.el)
+        }
+    }
 
+}
 // 参数1：旧的子节点列表
 // 参数2：新的子节点列表
 // 参数3：父节点dom
@@ -306,7 +393,7 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
         }
     } else if (start >= newEnd && oldEnd > newEnd) {
         // 删除
-        for (let i = start; i <= oldEnd; i++) {            
+        for (let i = start; i <= oldEnd; i++) {
             removeDomByVnode(oldChildren[i], parentDom)
         }
     } else if (!(start > oldEnd && start > newEnd)) {
@@ -335,10 +422,10 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
                     mapEntry.hasDiff = true
                     // 重新建立mapEntry与dom或者组件的映射关系
                     setVnodeDomMap({ vnode: mapEntry, el: item.el, component: item.component })
-                   
+
                 } else {
                     // 找不到表示节点应该删除
-                    removeDomByVnode(item, parentDom) 
+                    removeDomByVnode(item, parentDom)
                 }
             }
         })
@@ -349,8 +436,8 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
                     vnode: newChildren[entry.position],
                     parentDom,
                     insertIndex: entry.position,
-                })                
-                setVnodeDomMap({ vnode: entry, el: newChildren[entry.position].el, component: newChildren[entry.position].component })               
+                })
+                setVnodeDomMap({ vnode: entry, el: newChildren[entry.position].el, component: newChildren[entry.position].component })
             }
         })
         // d.处理位置的移动，采用LIS算法进行最小移动
@@ -372,8 +459,8 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
         Object.entries(keyToNewIndexMap).forEach(([key, entry]) => {
             if (noRemoveIndex.indexOf(index) < 0) {
                 // 需要移动，先删除dom，后面再一起插入   
-                //???             
-                //removeDomByVnode(entry, parentDom)
+                //???   这个代码还真需要，可是这样不合情理，组件不应该被卸载          
+                removeDomByVnode(entry, parentDom)
                 needRemoveArray.push(entry)
             }
             index++
@@ -381,8 +468,8 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
         // 按插入位置从前往后排序
         const sortedArray = needRemoveArray.sort((a, b) => a.position - b.position)
         sortedArray.forEach((item) => {
-            const { el, position } = item            
-            insertDomByVnode(item, parentDom, position)            
+            const { el, position } = item
+            insertDomByVnode(item, parentDom, position)
         })
     }
 

@@ -176,10 +176,11 @@ const getPropsStr = function (obj) {
 ```js
 // help.js
 // 1.新增静态节点虚拟dom的创建方式createStaticNode
- createStaticNode(content) {
+createStaticNode(content) {
     return {
       isStatic: true, // 是否是静态节点标识
       el: null, // 真实的dom节点
+      props:{}, // props为空对象
       // content, // 模版字符串
       // 这里用mount函数代替简单的content属性，实现真实dom的缓存
       mount: (() => {
@@ -188,15 +189,13 @@ const getPropsStr = function (obj) {
         let cacheDom = null
         return () => {
           if (!cacheDom) {
-            const temp = document.createElement('template')
+            const temp = document.createElement('div')
             temp.innerHTML = content
-            cacheDom = temp.content
+            cacheDom = temp.childNodes[0]
           } else {
             console.log("跳过静态节点创建")
           }
-          // 当缓存后的 template.content 被插入真实DOM后，浏览器会清空片段内容
-          // 所以需要克隆下
-          return cacheDom.cloneNode(true); 
+          return cacheDom
         }
       })()
     }
@@ -371,10 +370,7 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
             const oldText = oldVnodeTree.childrens.join("")
             if (oldText !== newText) {
                 dom.innerText = newText
-            }
-            // 如果是动态文本，说明没有子节点了，直接返回
-            VnodeTree.el = oldVnodeTree.el
-            return
+            }            
         }
         // dom属性有更新
         const oldProps = oldVnodeTree.props
@@ -412,7 +408,8 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
             // 在目前我们模拟的情况下，只实现了v-if指令，这个指令的逻辑在generate时就处理过了，所以这里暂不写逻辑
         }
 
-        VnodeTree.el = oldVnodeTree.el
+       // 设置vnode与dom或者组件的映射关系
+        setVnodeDomMap({ vnode: VnodeTree, el: oldVnodeTree.el, component: oldVnodeTree.component })
         // 处理子节点
         if (oldVnodeTree.patchFlag & PatchFlags.CHILDREN) {
             diffChildren(oldVnodeTree.childrens || [], VnodeTree.childrens || [], oldVnodeTree.el)
