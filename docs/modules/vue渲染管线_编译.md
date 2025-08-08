@@ -338,9 +338,9 @@ const getPropsStr = function (obj) {
                 // 参数的最后追加event
                 args = args ? `${args},event` : 'event'
                 const funName = match?.[1]
-                returnStr += `${attr.name}:(event)=>${getExpStr(funName)}(${args}),`
+                returnStr += `${attr.name}:(event)=>this.${funName}(${args}),`
             } else {
-                returnStr += `${attr.name}:${getExpStr(attr.function)},`
+                returnStr += `${attr.name}:this.${attr.function},`
             }
         } else {
             // 其他指令 暂不模拟
