@@ -417,19 +417,40 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
 // 模版进行调整，增加静态节点元素
 // 定义模板
 const template = `
-  <div id="1" :class="class1">
+  <div  :class="class1">
    <a href="https://www.baidu.com" target="_blank">我是静态节点1</a>
-   <div id="2" v-if="isShow"><p>我是静态节点2</p>  </div>
-   <button  @click="add(1)">add</button>
-   <button  @click="hide">{{btnText}}</button>
-   <h1  >数量:{{ num }}</h1>   
+   <div id="static2" v-if="isShow"><p>我是静态节点2</p>  </div>
+  <button id="add" @click="add(1)">add</button>
+   <button id="hide" @click="hide">{{btnText}}</button>
    <ChildComponent    :num="num" @add="add"></ChildComponent>
- </div>
+    <a href="https://www.baidu.com" target="_blank">我是静态节点3</a>
+   <div id="static4" v-if="isShow"><p>我是静态节点4</p>  </div>  
+
+   <button  @click="addItem(444)">addItem</button>  
+    <button  @click="sort">排序</button> 
+   <ul>
+      <li v-for="item in items" :key="item.id">
+        我是for列表：{{item.text}}
+        <button  @click="delItem(item)">delItem</button>        
+      </li>
+   </ul> 
  `
+ // ...
+ // 新增列表逻辑
+const array = new Array(10000).fill(0).map((i, k) => {
+    return { id: k, text: k }
+}).reverse()
+const sort = () => {
+    items.sort((item1, item2) => {
+    return item2.id - item1.id
+    })
+}
 ```
 ### 执行结果
-点击add按钮后，跳过静态节点对比2次
-![优化结果图1](../_media/transform_result1.png)
-点击hide按钮隐藏再显示，跳过静态节点对比2次，创建1次
-![优化结果图2](../_media/transform_result2.png)
+列表数据10000条情况下，挂载、点击列表添加、删除、排序按钮的结果表现：
+![优化后结果图](../_media/optimize_patchFlag_10000.png)
 
+列表数据20000条表现：
+![优化后结果图20000](../_media/optimize_patchFlag_20000.png)
+
+可以看到时间数据比之前好太多，2万条数据的挂载更新也就100多毫秒

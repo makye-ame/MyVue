@@ -49,7 +49,7 @@ export default {
     })
 
     // 新增列表逻辑
-    const array = new Array(10).fill(0).map((i, k) => {
+    const array = new Array(100000).fill(0).map((i, k) => {
       return { id: k, text: k }
     }).reverse()
     let index = array.length - 1
@@ -64,7 +64,7 @@ export default {
     }
     const sort = () => {
       items.sort((item1, item2) => {
-        return item1.id - item2.id
+        return item2.id - item1.id
       })
     }
 
