@@ -139,7 +139,6 @@ export const tranform = function (ast) {
     // 更新类型标记
     markPatchFlag(ast)
     staticNodeCache(ast)
-    console.log("优化后的ast:", ast)
 }
 export const PatchFlags = {
     // 特殊标记：静态提升节点
@@ -280,7 +279,6 @@ export const generate = function (ast) {
     `
     const func = new Function('createVNode', 'createTextNode', 'createStaticNode', funcStr)
     const renderFunc = func(h.createVNode, h.createTextNode, h.createStaticNode)
-    console.log("render函数：", renderFunc)
     return renderFunc
 }
 function digui(obj) {

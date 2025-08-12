@@ -290,11 +290,11 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
     // 节点相同不需要对比，直接返回
     // 静态节点用的缓存节点，所以新旧节点一定是相等的
     if (oldVnodeTree === VnodeTree) {
-        if (oldVnodeTree.isStatic) {
-            console.log("跳过静态节点对比")
-        } else {
-            console.log("其他节点相同情况")
-        }
+        // if (oldVnodeTree.isStatic) {
+        //     console.log("跳过静态节点对比")
+        // } else {
+        //     console.log("其他节点相同情况")
+        // }
         return
     }
     if (!isSameVNodeType(oldVnodeTree, VnodeTree)) {
@@ -399,13 +399,14 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
     } else if (!(start > oldEnd && start > newEnd)) {
         // 3.如果还有剩余不同节点，处理剩余节点
         // a. 对新节点建立key和位置的映射表
-        const keyToNewIndexMap = {}
+        // 要用map存储，map才是有序的
+        const keyToNewIndexMap = new Map()
         newChildren.slice(start, newEnd + 1).forEach((item, i) => {
             if (item) {
                 const key =
                     typeof item.props.key !== 'undefined' ? item.props.key : `__temp_key_${i + start}`
                 // 根据key值建立映射对象，对象包含新的位置(position)，是否已经比对更新过(hasDiff)，真实dom节点(el)
-                keyToNewIndexMap[key] = { position: i + start, hasDiff: false, el: null, component: null }
+                keyToNewIndexMap.set(key, {position: i + start, hasDiff: false, el: null, component: null })
             }
         })
         // b. 遍历旧节点，映射表里找不到的旧节点表示应该删除，找到的进行对比更新，记录更新状态、更新虚拟dom的el指向新的dom节点
@@ -413,7 +414,7 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
             if (item) {
                 const key =
                     typeof item.props.key !== 'undefined' ? item.props.key : `__temp_key_${i + start}`
-                const mapEntry = keyToNewIndexMap[key]
+                const mapEntry = keyToNewIndexMap.get(key)
                 if (mapEntry) {
                     // 找到了 key，进行属性更新
                     const newIndex = mapEntry.position
@@ -430,7 +431,7 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
             }
         })
         // c.映射表里剩余的节点，表示新增节点
-        Object.entries(keyToNewIndexMap).forEach(([key, entry]) => {
+        keyToNewIndexMap.values().forEach((entry) => {
             if (!entry.hasDiff) {
                 mount({
                     vnode: newChildren[entry.position],
@@ -444,7 +445,7 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
         // 找到新节点在原队列里的位置
         const oldPositions = []
         const parentChildren = Array.from(parentDom.children || [])
-        Object.entries(keyToNewIndexMap).forEach(([key, entry]) => {
+        keyToNewIndexMap.values().forEach((entry) => {
             const el = entry.el || entry.component.vnode.el
             // 根据key找到虚拟dom对应的原位置
             const indexInParent = parentChildren.indexOf(el)
@@ -456,9 +457,10 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
         const noRemoveIndex = findLIS(oldPositions)
         let index = 0
         const needRemoveArray = []
-        Object.entries(keyToNewIndexMap).forEach(([key, entry]) => {
+        keyToNewIndexMap.values().forEach((entry) => {
             if (noRemoveIndex.indexOf(index) < 0) {
-                // 需要移动，先删除dom，后面再一起插入   
+                // 需要移动，先删除dom，后面再一起插入 
+                // 不然已经存在的需要移动的dom霸占了位置，就可能导致insertBefore移动时位置是错的  
                 //???   这个代码还真需要，可是这样不合情理，组件不应该被卸载          
                 removeDomByVnode(entry, parentDom)
                 needRemoveArray.push(entry)

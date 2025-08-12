@@ -271,8 +271,7 @@ export const generate = function (ast) {
         return render
     `
     const func = new Function('createVNode', 'createTextNode', 'createStaticNode', funcStr)
-    const renderFunc = func(h.createVNode,h.createTextNode,h.createStaticNode)
-    console.log("render函数：",renderFunc)
+    const renderFunc = func(h.createVNode,h.createTextNode,h.createStaticNode)    
     return renderFunc
 }
 // 4. render函数生成时，用变量名替换createStaticNode
@@ -347,12 +346,7 @@ const createDomDuiGui = function ({ instance, vnode, parentDom, insertIndex }) {
 const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
     // 节点相同不需要对比，直接返回
     // 静态节点用的缓存节点，所以新旧节点一定是相等的
-    if (oldVnodeTree === VnodeTree) {
-        if(oldVnodeTree.isStatic){
-            console.log("跳过静态节点对比")
-        }else{
-            console.log("其他节点相同情况")
-        }
+    if (oldVnodeTree === VnodeTree) {        
         return
     }    
     if (!isSameVNodeType(oldVnodeTree, VnodeTree)) {
