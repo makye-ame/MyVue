@@ -1,5 +1,5 @@
 import { ref,watchEffect } from '../src/libs/core.js'
-import { parse, generate } from '../src/libs/compiler.js';
+import { parse, generate,tranform } from '../src/libs/compiler.js';
 import h from '../src/libs/help.js'
 const data = {
     message: '我是插值message',
@@ -20,7 +20,8 @@ watchEffect(()=>{
 })
 export const context = { ...data, hide ,add}
 export function generateExcute(template,$context={}) {
-    const root = parse(template);
+    let root = parse(template);
+    tranform(root)
     const render = generate(root)
     //render.bind(context)
     const vnode = render.call(

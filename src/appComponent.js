@@ -4,7 +4,14 @@ import ChildComponent from './childComponent.js'
 // 定义模板
 const template = `
   <div  :class="class1">
-   
+   <a href="https://www.baidu.com" target="_blank">我是静态节点1</a>
+   <div id="static2" v-if="isShow"><p>我是静态节点2</p>  </div>
+  <button id="add" @click="add(1)">add</button>
+   <button id="hide" @click="hide">{{btnText}}</button>
+   <ChildComponent    :num="num" @add="add"></ChildComponent>
+    <a href="https://www.baidu.com" target="_blank">我是静态节点3</a>
+   <div id="static4" v-if="isShow"><p>我是静态节点4</p>  </div>  
+
    <button  @click="addItem(444)">addItem</button>  
     <button  @click="sort">排序</button> 
    <ul>
@@ -42,7 +49,7 @@ export default {
     })
 
     // 新增列表逻辑
-    const array = new Array(10000).fill(0).map((i, k) => {
+    const array = new Array(10).fill(0).map((i, k) => {
       return { id: k, text: k }
     }).reverse()
     let index = array.length - 1
@@ -57,7 +64,7 @@ export default {
     }
     const sort = () => {
       items.sort((item1, item2) => {
-        return item2.id - item1.id
+        return item1.id - item2.id
       })
     }
 

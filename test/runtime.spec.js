@@ -2,7 +2,7 @@ import { createApp, update, findLIS } from '../src/libs/runtime.js'
 import { reactive, ref } from '../src/libs/core.js'
 import { parse, generate } from '../src/libs/compiler.js'
 import h from '../src/libs/help.js'
-import { $domUpdate } from '../src/libs/scheduler.js'
+import { $domUpdate, $nextTick } from '../src/libs/scheduler.js'
 import { describe, test, expect, vi, beforeEach } from 'vitest'
 const { createVNode, createTextNode } = h
 
@@ -30,7 +30,7 @@ describe('runtime - createApp', () => {
 
         // 模拟document.querySelector
         const mockElement = document.createElement('div')
-        
+
         document.querySelector = vi.fn(() => mockElement)
 
         app.mount('#app')
@@ -70,7 +70,7 @@ describe('runtime - mount', () => {
         const app = createApp({
             render: () => vnode
         })
-        
+
         document.querySelector = vi.fn(() => parentDom)
 
         app.mount('#app')
@@ -91,7 +91,7 @@ describe('runtime - mount', () => {
 
         const parentDom = document.createElement('div')
         const app = createApp(mockComponent)
-        
+
         document.querySelector = vi.fn(() => parentDom)
 
         app.mount('#app')
@@ -107,7 +107,7 @@ describe('runtime - mount', () => {
         // 子组件
         const childComponent = {
             setup: vi.fn(() => ({})),
-            render: vi.fn(function (createVNode) {
+            render: vi.fn(function () {
                 return createVNode('div', { class: 'child' }, ['子组件内容'])
             })
         }
@@ -115,7 +115,7 @@ describe('runtime - mount', () => {
         // 父组件
         const parentComponent = {
             setup: vi.fn(() => ({})),
-            render: vi.fn(function (createVNode) {
+            render: vi.fn(function () {
                 // 在父组件的render函数中使用子组件
                 return createVNode('div', { class: 'parent' }, [
                     createVNode(childComponent, {}, [])
@@ -125,7 +125,7 @@ describe('runtime - mount', () => {
 
         const parentDom = document.createElement('div')
         const app = createApp(parentComponent)
-        
+
         document.querySelector = vi.fn(() => parentDom)
 
         app.mount('#app')
@@ -156,7 +156,7 @@ describe('runtime - props reactivity', () => {
                 return { count: props.count };
             }),
             // render函数不能用箭头函数，不然this会指向错误
-            render: vi.fn(function (createVNode) {
+            render: vi.fn(function () {
                 return createVNode('div', { class: 'child' }, [`Count: ${this.count}`]);
             }),
             beforeUpdate: vi.fn()
@@ -169,7 +169,7 @@ describe('runtime - props reactivity', () => {
                 const state = reactive({ count: 0 });
                 return { state };
             }),
-            render: vi.fn(function (createVNode) {
+            render: vi.fn(function () {
                 return createVNode('div', {}, [createVNode(childComponent, { count: this.state.count }, [])]);
             })
         };
@@ -183,7 +183,7 @@ describe('runtime - props reactivity', () => {
         app.mount('#app');
 
         // 等待挂载完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         // 获取子组件实例
         const childInstance = app.vnode.childrens[0].component;
@@ -197,7 +197,7 @@ describe('runtime - props reactivity', () => {
         app.context.state.count = 1;
 
         // 等待更新完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         // 验证子组件props是否更新
         expect(childInstance.props.count).toBe(1);
@@ -299,10 +299,10 @@ describe('runtime - update', () => {
         document.querySelector = vi.fn(() => mockElement);
         app.mount("app")
         // 等待挂载完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
         app.context.class.value = 'old'
         // 等待更新完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         expect(mockComponent.beforeUpdate).toHaveBeenCalled()
         expect(mockComponent.updated).toHaveBeenCalled()
@@ -321,12 +321,12 @@ describe('runtime - update', () => {
         document.querySelector = vi.fn(() => mockElement);
         app.mount("app")
         // 等待挂载完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
         expect(mockElement.childNodes[0].childNodes.length).toBe(1)
 
         app.context.show.value = false
         // 等待更新完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         expect(mockComponent.beforeUpdate).toHaveBeenCalled()
         expect(mockComponent.updated).toHaveBeenCalled()
@@ -393,7 +393,7 @@ describe('runtime - update', () => {
                     }
                 };
             }),
-            render: vi.fn(function (createVNode) {
+            render: vi.fn(function () {
                 return createVNode('button', { onClick: this.handleClick }, ['Click', this.props.num]);
             }),
             beforeUpdate: vi.fn()
@@ -410,7 +410,7 @@ describe('runtime - update', () => {
                     num
                 }
             },
-            render: vi.fn(function (createVNode) {
+            render: vi.fn(function () {
                 return createVNode('div', {}, [createVNode(childComponent, { num: this.num.value, onincrement: this.onIncrement }, [])]);
 
             })
@@ -425,7 +425,7 @@ describe('runtime - update', () => {
         app.mount('#app');
 
         // 等待挂载完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         // 获取子组件实例
         const childInstance = app.vnode.childrens[0].component;
@@ -433,7 +433,7 @@ describe('runtime - update', () => {
         // 调用子组件的方法触发emit
         childInstance.context.handleClick();
         // 等待更新完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
         // 验证父组件的事件处理函数是否被调用
         expect(mockElement.querySelector('button').textContent).toBe('Click1')
         // 恢复原始函数
@@ -460,11 +460,11 @@ describe('runtime - unmount', () => {
         document.querySelector = vi.fn(() => mockElement);
 
         app.mount('#app');
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         // 执行卸载
         app.unmount();
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         // 验证生命周期钩子是否被触发
         expect(mockComponent.beforeUnmount).toHaveBeenCalled();
@@ -491,7 +491,7 @@ describe('runtime - unmount', () => {
             setup: vi.fn(() => ({})),
             beforeUnmount: vi.fn(),
             unmounted: vi.fn(),
-            render: vi.fn(function (createVNode) {
+            render: vi.fn(function () {
                 return createVNode('div', { class: 'parent' }, [
                     createVNode(childComponent, {}, [])
                 ]);
@@ -505,7 +505,7 @@ describe('runtime - unmount', () => {
         document.querySelector = vi.fn(() => mockElement);
 
         app.mount('#app');
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         // 模拟应用卸载
         if (!app.unmount) {
@@ -527,7 +527,7 @@ describe('runtime - unmount', () => {
 
         // 执行卸载
         app.unmount();
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
 
         // 验证生命周期钩子触发顺序
         expect(parentComponent.beforeUnmount).toHaveBeenCalled();
@@ -553,7 +553,7 @@ describe('runtime - 集成测试', () => {
                     }
                 };
             }),
-            render: vi.fn(function (createVNode) {
+            render: vi.fn(function () {
                 return createVNode('button', { onClick: this.handleClick }, ['Click', this.props.num]);
             }),
             beforeCreate: vi.fn(),
@@ -631,16 +631,16 @@ describe('runtime - 集成测试', () => {
         // 验证父子通信
         const childInstance = app.vnode.childrens[2].component;
         childInstance.context.handleClick();
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
         expect(childComponent.beforeUpdate).toHaveBeenCalled();
         expect(childComponent.updated).toHaveBeenCalled();
         // 验证父组件的事件处理函数是否被调用
         expect(mockElement.querySelector('button').textContent).toBe('Click1')
-  
+
         // 验证卸载
         app.unmount()
         // 等待卸载完成
-        await new Promise(resolve => setTimeout(resolve, 0));
+         await $nextTick();
         expect(parentComponent.beforeUnmount).toHaveBeenCalled();
         expect(childComponent.beforeUnmount).toHaveBeenCalled();
         expect(childComponent.unmounted).toHaveBeenCalled();

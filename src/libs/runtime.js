@@ -2,6 +2,7 @@ import h from './help.js'
 import { parse, generate, tranform, PatchFlags } from './compiler.js'
 import { watchEffect, reactive } from './core.js'
 import { $domUpdate, $nextTick } from './scheduler.js'
+
 // 参数1:组件配置对象component
 // 参数2:组件节点的props属性
 // 参数3:父组件实例_instance
@@ -314,10 +315,10 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
             if (oldText !== newText) {
                 dom.innerText = newText
             }
-           
+
         }
         // dom属性有更新
-        const oldProps = oldVnodeTree.props       
+        const oldProps = oldVnodeTree.props
         const newProps = VnodeTree.props
         // 动态class
         if (oldVnodeTree.patchFlag & PatchFlags.CLASS) {
@@ -406,7 +407,7 @@ const diffChildren = function (oldChildren, newChildren, parentDom) {
                 const key =
                     typeof item.props.key !== 'undefined' ? item.props.key : `__temp_key_${i + start}`
                 // 根据key值建立映射对象，对象包含新的位置(position)，是否已经比对更新过(hasDiff)，真实dom节点(el)
-                keyToNewIndexMap.set(key, {position: i + start, hasDiff: false, el: null, component: null })
+                keyToNewIndexMap.set(key, { position: i + start, hasDiff: false, el: null, component: null })
             }
         })
         // b. 遍历旧节点，映射表里找不到的旧节点表示应该删除，找到的进行对比更新，记录更新状态、更新虚拟dom的el指向新的dom节点

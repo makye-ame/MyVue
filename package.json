@@ -1,7 +1,7 @@
 {
   "scripts": {
-    "test": "vitest ",
-    "testDebug": "vitest test/scheduler.spec.js:137 --inspect-brk --no-file-parallelism --test-timeout=0",
+    "test": "vitest test/runtime.spec.js",
+    "testDebug": "vitest test/compiler.spec.js:252 --inspect-brk --no-file-parallelism --test-timeout=0",
     "coverage": "vitest run --coverage"
   },
   "devDependencies": {
