@@ -59,42 +59,43 @@ export const reactive = function (obj) {
     return proxy
 }
 // reative代理对象，支持深层嵌套
-// export const reactive = function (obj) {
-//     if (typeof obj !== 'object' || obj === null) {
-//         return obj // 非对象或 null 不需要代理
-//     }
-//     // 已经有代理直接返回
-//     if (reactiveMap.has(obj)) {
-//         return reactiveMap.get(obj)
-//     }
-//     // reactive做两件事，1：生成一个proxy对象，2.做get，set拦截
-//     const proxy = new Proxy(obj, {
-//         get(target, key) {
-//             // 收集订阅者
-//             track(target, key)
-//             let value = target[key]
-//             if (typeof value === 'object') {
-//                 return reactive(value)
-//             } else {
-//                 return value
-//             }
-//         },
-//         set(target, key, value) {
-//             // 判断新旧值不等
-//             // 但是如果是数组添加删除元素，会触发length的更改，而新旧值一定相等，所以特殊处理下
-//             if (target[key] !== value || key === 'length') {
-//                 target[key] = value
-//                 // 触发更新
-//                 trigger(target, key)
-//             }
-//             // set必须设置返回
-//             return true
-//         },
-//     })
-//     // 目标对象和代理对象建立映射关系
-//     reactiveMap.set(obj, proxy)
-//     return proxy
-// }
+export const reactiveOld = function (obj) {
+    if (typeof obj !== 'object' || obj === null) {
+        return obj // 非对象或 null 不需要代理
+    }
+    // 已经有代理直接返回
+    if (reactiveMap.has(obj)) {
+        return reactiveMap.get(obj)
+    }
+    // reactive做两件事，1：生成一个proxy对象，2.做get，set拦截
+    const proxy = new Proxy(obj, {
+        get(target, key) {
+            // 收集订阅者
+            track(target, key)
+            let value = target[key]
+            if (typeof value === 'object') {
+                return reactive(value)
+            } else {
+                return value
+            }
+        },
+        set(target, key, value) {
+            // 判断新旧值不等
+            // 但是如果是数组添加删除元素，会触发length的更改，而新旧值一定相等，所以特殊处理下
+            if (target[key] !== value || key === 'length') {
+                target[key] = value
+                // 触发更新
+                console.log("触发更新,key:",key)
+                trigger(target, key)
+            }
+            // set必须设置返回
+            return true
+        },
+    })
+    // 目标对象和代理对象建立映射关系
+    reactiveMap.set(obj, proxy)
+    return proxy
+}
 // ref的默认值可以是普通类型，也可以是对象，如果是对象，会再封装成reactie
 export const ref = function (defaultV) {
     const refObj = {
@@ -158,15 +159,29 @@ const trigger = function (target, key) {
 // todo 
 // 这里的watchEffect不能嵌套使用
 // 一个时间点只能支持一个watchEffect存在，不然会有潜在问题
-// 要支持嵌套调用，需要使用栈来存储当前的effect
+// 1.要支持嵌套调用，需要使用栈来存储当前的effect
 let effectStack = []
 export const watchEffect = function (update) {
+    let cleanup = null // 存储清理函数
     const effect = () => {
+        // 2.每次执行之前先清理旧的副作用
+        if (cleanup) {
+            cleanup()
+            cleanup = null 
+        }
         currentEffect = effect
         effectStack.push(effect)
-        update()
-        effectStack.pop()
-        currentEffect = effectStack.length - 1 >= 0 ? effectStack[effectStack.length - 1] : null
+        // 3.try增强健壮性，如果update执行出错，也要保证effectStack的正常   
+        try {
+            const result = update()
+            // 如果更新函数有返回清理函数，保存清理函数
+            if (typeof result === 'function') {
+                cleanup = result
+            }
+        } finally {
+            effectStack.pop()
+            currentEffect = effectStack.length - 1 >= 0 ? effectStack[effectStack.length - 1] : null
+        }
     }
     // 立即执行，在这个过程中会自动收集依赖
     effect()

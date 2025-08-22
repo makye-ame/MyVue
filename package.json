@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "test": "vitest test/compiler.spec.js",
+    "test": "vitest test/core.spec.js",
     "testDebug": "vitest test/core.spec.js:4 --inspect-brk --no-file-parallelism --test-timeout=0",
     "coverage": "vitest run --coverage"
   },

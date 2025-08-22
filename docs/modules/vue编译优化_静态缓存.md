@@ -381,27 +381,7 @@ const template = `
  `
 
 ```
-## 暴露的问题
-**列表节点的交互没有反应，其他节点都有反应**
-原因：watchEffect嵌套导致的，内层的watchEffect update执行完，effect就被置为null，外层watchEffect再收集响应式数据依赖时，就没有effect无法收集了，所以列表节点的交互没有反应
-解决方案：目前的watchEffect实现不支持嵌套，需要优化成支持嵌套调用
 
-```js
-// core.js
-// 要支持嵌套调用，需要使用栈来存储当前的effect
-let effectStack = []
-export const watchEffect = function (update) {
-    const effect = () => {
-        currentEffect = effect
-        effectStack.push(effect)
-        update()
-        effectStack.pop()
-        currentEffect = effectStack.length - 1 >= 0 ? effectStack[effectStack.length - 1] : null
-    }
-    // 立即执行，在这个过程中会自动收集依赖
-    effect()
-}
-```
 ## 执行结果
 列表项为4000条数据，分别点击添加、删除、排序按钮
 未做静态缓存处理，结果表现如下：
