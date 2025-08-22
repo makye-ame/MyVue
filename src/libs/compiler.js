@@ -138,7 +138,9 @@ const getAttributes = function (attrStr) {
 export const tranform = function (ast) {
     // 更新类型标记
     markPatchFlag(ast)
+    // 静态缓存
     staticNodeCache(ast)
+    staticContainerNodeCache(ast)
 }
 export const PatchFlags = {
     // 特殊标记：静态提升节点
@@ -215,6 +217,35 @@ const markPatchFlag = function (ast) {
 }
 // 静态节点缓存列表
 let hoistedList = []
+// 静态容器节点缓存列表：本身是静态，但有动态子节点
+let hoistedContainerList = []
+// v-for指令下的静态容器不要提升变量缓存！！！
+// 用栈存储v-for指令
+const vforStack = []
+const staticContainerNodeCache = function (ast) { 
+    // 入栈   
+    if (ast.attrs?.['v-for']) {
+        vforStack.push(ast)
+    }
+    if (ast.patchFlag === PatchFlags.CHILDREN) {       
+        // v-for栈为空，则不在v-for指令下
+        if (vforStack.length === 0) {
+            hoistedContainerList.push(ast)
+            // 缓存静态容器节点的索引,这样静态容器节点和变量才可以关联起来
+            ast.hoistedContainerIndex = hoistedContainerList.length - 1
+        }
+    }
+    if (ast.children && ast.children.length > 0) {
+        // 递归处理子节点
+        ast.children.forEach((child) => {
+            staticContainerNodeCache(child)
+        })
+    }
+    // 出栈
+    if (ast.attrs?.['v-for']) {
+        vforStack.pop()
+    }
+}
 const staticNodeCache = function (ast) {
     // 判断是否是静态节点
     if (!ast.isDynamic && ast.patchFlag === PatchFlags.HOISTED) {
@@ -260,33 +291,94 @@ const serializeNode = function (ast) {
 // 三.生成render函数
 export const generate = function (ast) {
     // 生成静态节点变量声明
+
     const hoistedDeclarations = hoistedList.map((item, i) => {
         return `const _hoisted_${i} = createStaticNode('${item}')`
     }).join(';\n')
     // 重置静态节点列表
     hoistedList = []
+    // 生成静态容器节点变量声明
+    const hoistedContainerDeclarations = getHoistedContainerDeclarations()
+    hoistedContainerList = []
+
     // 递归处理ast
     const resultStr = digui(ast)
     // 把字符串转成真实的函数
     // 把变量提取到render函数之外
     // 这里的render函数写法要注意不要用箭头函数，不然上下文this会有问题
+
     const funcStr = `
         ${hoistedDeclarations}
+        ${hoistedContainerDeclarations}
         const render = function(){
            return ${resultStr}
         }
         return render
     `
+
     const func = new Function('createVNode', 'createTextNode', 'createStaticNode', funcStr)
     const renderFunc = func(h.createVNode, h.createTextNode, h.createStaticNode)
     return renderFunc
 }
+function getHoistedContainerDeclarations() {
+    let containerDeclarations = ''
+    // 需要倒序遍历，子容器节点变量申明后，父容器节点才能使用该变量作为子节点
+    for (let i = hoistedContainerList.length - 1; i >= 0; i--) {
+        const node = hoistedContainerList[i]
+        const attrsStr = getPropsStr(node)
+        const tagStr = getTag(node.tag)
+        const childrenStr = getChildrenStr(node)
+        const declaration = `const _hoisted_container_${i} = createVNode(${tagStr},${attrsStr},${childrenStr},${node.patchFlag});\n`
+        containerDeclarations += declaration
+    }
+    return containerDeclarations
+}
+function getChildrenStr(node) {
+    let childrenStr = ''
+
+    // 所有直接子节点都是静态的（这个静态包括静态容器）
+    let allChildStatic = true
+    childrenStr = node?.children?.map(child => {
+        if (child.patchFlag === PatchFlags.CHILDREN && child.hoistedContainerIndex !== undefined) { // 增加判断：hoistedContainerIndex不为undefined
+            // 如果是静态容器
+            return `_hoisted_container_${child.hoistedContainerIndex}`
+        } else if (child.isStatic) {
+            // 如果是静态节点
+            return `_hoisted_${child.hoistedIndex}\n`
+        } else {
+            allChildStatic = false
+            // 动态节点
+            const vnode = digui(child)
+            return vnode
+        }
+
+    }).join(',') || `[]`
+
+    const isAlreadyArray = /^this\..*\.map/.test(childrenStr) || childrenStr.startsWith('[');
+    if (!isAlreadyArray) {
+        childrenStr = `[${childrenStr}]`
+    }
+    // 如果有动态子节点，返回计算函数;
+    if (allChildStatic) {
+        return childrenStr
+    } else {
+        return `function(){
+            return ${childrenStr}
+        }`
+    }
+}
 function digui(obj) {
     let str = ''
     if (obj.isStatic) {
+        // 静态节点
         // 根据索引得到变量名
-        str += `_hoisted_${obj.hoistedIndex}`
+        str += `_hoisted_${obj.hoistedIndex}\n`
+    } else if (obj.patchFlag === PatchFlags.CHILDREN && obj.hoistedContainerIndex !== undefined) {  // 增加判断：hoistedContainerIndex不为undefined
+
+        // 静态容器
+        str += `_hoisted_container_${obj.hoistedContainerIndex}\n`
     } else {
+        // 动态节点
         // 对于不同的type，处理逻辑不同，文本和插槽比较简单，创建一个文本虚拟dom即可；
         // ELEMENT比较复杂，需要拼接子节点字符串，属性字符串，而属性还包括指令的处理(这里只简单模拟v-if)再创建一个元素虚拟dom
         switch (obj.type) {
@@ -311,7 +403,7 @@ function digui(obj) {
                     // 获取指令的值
                     const v = getExpStr(obj.attrs['v-if'].exp)
                     // 如果值为true才创建虚拟dom，否则返回空字符
-                    str += `(${v}) ? createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag}) : ''`
+                    str += `(${v}) ? createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag})\n : ''`
                 } else if (obj.attrs?.hasOwnProperty('v-for')) {
                     // 增加v-for指令的处理
                     const v = obj.attrs['v-for'].exp;
@@ -327,14 +419,16 @@ function digui(obj) {
 
                     // v-for 生成的 childStr 是一个数组表达式
                     const tagStr = getTag(obj.tag)
-                    const vforStr = `this.${source}?.map((${alias}) => {
-                    return createVNode(${tagStr}, { key: ${keyExp} }, ${childStr},${obj.patchFlag})
-                })`;
+                    // v-for会生成新的作用域
+                    // 这里用闭包的方式把新的作用域传递到里面去
+                    const vforStr = `this.${source}?.map((${alias})=> {
+                        return createVNode(${tagStr}, { key: ${keyExp} }, ${childStr},${obj.patchFlag})                                         
+                })\n`;
 
                     str += vforStr;
                 } else {
                     // 无指令的普通情况
-                    str += `createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag})`
+                    str += `createVNode(${tagStr}, ${attrsStr}, ${childStr},${obj.patchFlag})\n`
                 }
                 break;
             case TYPE.TEXT:

@@ -11,9 +11,9 @@ export default {
   name: 'childComponent',
   template,
   setup(props, ctx) {
-    watchEffect(() => {
-      console.log('props changed:', props.num)
-    })
+    // watchEffect(() => {
+    //   console.log('props changed:', props.num)
+    // })
     const add = () => {
       ctx.emit('add', props.num)
     }

@@ -4,19 +4,13 @@ import ChildComponent from './childComponent.js'
 // 定义模板
 const template = `
   <div  :class="class1">
-   <a href="https://www.baidu.com" target="_blank">我是静态节点1</a>
-   <div id="static2" v-if="isShow"><p>我是静态节点2</p>  </div>
-  <button id="add" @click="add(1)">add</button>
-   <button id="hide" @click="hide">{{btnText}}</button>
-   <ChildComponent    :num="num" @add="add"></ChildComponent>
-    <a href="https://www.baidu.com" target="_blank">我是静态节点3</a>
-   <div id="static4" v-if="isShow"><p>我是静态节点4</p>  </div>  
 
    <button  @click="addItem(444)">addItem</button>  
     <button  @click="sort">排序</button> 
    <ul>
       <li v-for="item in items" :key="item.id">
-        我是for列表：{{item.text}}
+        <div><div><div><div><div><div><div><div>我是被包含在静态容器里的动态子节点</div></div></div></div></div></div></div></div>  
+        <span>{{item.text}}</span>
         <button  @click="delItem(item)">delItem</button>        
       </li>
    </ul>  
@@ -49,7 +43,7 @@ export default {
     })
 
     // 新增列表逻辑
-    const array = new Array(100000).fill(0).map((i, k) => {
+    const array = new Array(4000).fill(0).map((i, k) => {
       return { id: k, text: k }
     }).reverse()
     let index = array.length - 1

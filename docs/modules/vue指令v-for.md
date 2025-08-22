@@ -115,6 +115,71 @@ export default {
   // 其他生命周期函数...
 }  
 ```
+## 暴露的问题
+数组的删除和添加操作，会导致后续所有数据项的修改，从而触发了响应式系统的多次set劫持，trigger了多次更新。
+目前响应式数据reactive的实现比较简单，需要做下优化工作
+```js
+// core.js
+// 优化对数组的代理
+// 数组的删除增加会导致后续的项都更改，从而触发了多次拦截，这不是我们想要的
+// 所以我们需要覆盖数组的方法，返回数组变异方法，在方法里统一触发一次更新
+// 如果是数组变异方法导致数组的修改，直接跳过触发（已在上一步中手动触发）
+// 拦截数组的方法
+const arrayMethods = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse']
+let isMutating = false  // 是否正在执行变异方法
+export const reactive = function (obj) {
+    if (typeof obj !== 'object' || obj === null) {
+        return obj // 非对象或 null 不需要代理
+    }
+    // 已经有代理直接返回
+    if (reactiveMap.has(obj)) {
+        return reactiveMap.get(obj)
+    }
+    // reactive做两件事，1：生成一个proxy对象，2.做get，set拦截
+    const proxy = new Proxy(obj, {
+        get(target, key) {
+            // 收集订阅者
+            track(target, key)
+            let value = target[key]
+            // 拦截数组的方法，返回数组变异方法，在方法里统一触发一次更新
+            if (Array.isArray(target) && arrayMethods.includes(key)) {
+                return function (...args) {
+                    isMutating = true
+                    const res = target[key].apply(this, args)
+                    isMutating = false
+                    // 触发更新
+                    trigger(target, 'length')
+                    return res
+                }
+
+            }
+            if (typeof value === 'object') {
+                return reactive(value)
+            } else {
+                return value
+            }
+        },
+        set(target, key, value) {
+            // 判断新旧值不等
+            if (target[key] !== value) {
+                target[key] = value
+                // 触发更新
+                // 如果是数组变异方法导致的修改，直接跳过触发（已在包装方法中手动触发）
+                if (!isMutating) {
+                    trigger(target, key)
+                }
+            }
+            // set必须设置返回
+            return true
+        },
+    })
+    // 目标对象和代理对象建立映射关系
+    reactiveMap.set(obj, proxy)
+    return proxy
+}
+```
+
+
 ## 运行结果
 初始挂载：
 ![v-for运行结果](../_media/optimize_vfor.png)

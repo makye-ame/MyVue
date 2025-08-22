@@ -1,4 +1,4 @@
-# vue3编译优化-更新类型标记、静态节点缓存
+# vue3编译优化-更新类型标记
 在vue官方文档[渲染机制](https://cn.vuejs.org/guide/extras/rendering-mechanism#compiler-informed-virtual-dom)有提到，Vue 编译阶段做了一些优化，让生成的虚拟 DOM带上编译时信息，以此来提高运行时的性能，具体优化有：更新类型标记，静态节点缓存，树结构打平。这些工作都是在transform转换阶段完成，也就是parse之后，generate之前
 - 更新类型标记：运行阶段重点关注的是那些动态的元素，响应式数据更新后，就要生成新的虚拟dom，新旧虚拟dom树进行diff对比等等，那如果说提前就标记好你的改动有哪些，明确目标后再开始针对性的行动，class需要更新，我们就针对性的更新class，样式要更新我们就针对性的更新样式，目标明确任务执行起来要轻松不少
 - 静态节点缓存：静态节点表示它永远不会更新，那么也就没有必要生成新的虚拟dom去进行diff对比，所以可以缓存起来重复使用
@@ -9,7 +9,7 @@
 vue中对不同的更新做了不同的标记，如：
 ```js
 const PatchFlags = {
-    // 特殊标记：静态提升节点
+    // 特殊标记：静态节点
     HOISTED: -1,
     // 0b00000001 - 动态文本内容（如{{ msg }}）
     TEXT: 1,
@@ -44,7 +44,7 @@ if (patchFlags & PatchFlags.CLASS) {
 ```js
 // compiler.js
 const PatchFlags = {
-    // 特殊标记：静态提升节点
+    // 特殊标记：静态节点
     HOISTED: -1,
     // 0b00000001 - 动态文本内容（如{{ msg }}）
     TEXT: 1,
@@ -162,139 +162,12 @@ const getPropsStr = function (obj) {
   },
 ```
 
-## 静态节点缓存
-### 分析
-静态节点有更加简单直接的插入方式，就是innerHtml，如果还有很多的子节点，都统一用innerHtml方式插入，都不用递归处理了
-怎么缓存静态节点以便重复使用呢？
-1. **新增静态虚拟节点的创建方式**:创建方式createStaticNode，接收参数content，也就是模版字符串
-2. **提取静态节点**: 如果ast节点为静态节点，将静态节点序列化为模板字符串，存放到列表里;同时ast节点设置索引属性，与模版字符串建立关联
-
-3. **生成静态虚拟节点变量**:生成render函数内容前，遍历列表，根据索引生成变量名，变量提升到render函数之外
-4. **变量替换**:render函数生成时，用变量名替换createStaticNode
-
-### 代码模拟实现
-```js
-// help.js
-// 1.新增静态节点虚拟dom的创建方式createStaticNode
-createStaticNode(content) {
-    return {
-      isStatic: true, // 是否是静态节点标识
-      el: null, // 真实的dom节点
-      props:{}, // props为空对象
-      // content, // 模版字符串
-      // 这里用mount函数代替简单的content属性，实现真实dom的缓存
-      mount: (() => {
-        // 静态虚拟dom可以缓存，那对应的真实dom也可以缓存
-        // 使用闭包缓存真实dom，以便运行阶段反复使用
-        let cacheDom = null
-        return () => {
-          if (!cacheDom) {
-            const temp = document.createElement('div')
-            temp.innerHTML = content
-            cacheDom = temp.childNodes[0]
-          } else {
-            console.log("跳过静态节点创建")
-          }
-          return cacheDom
-        }
-      })()
-    }
-  },
-// ...
-```
-
-```js
-// compiler.js
-// ...
-// 2. 如果ast节点为静态节点，将静态节点序列化为模板字符串，存放到列表里;同时ast节点设置索引属性，与模版字符串建立关联
-let hoistedList = []
-const staticNodeCache = function (ast) {
-    // 判断是否是静态节点
-    if (!ast.isDynamic && ast.patchFlag === PatchFlags.HOISTED) {
-        ast.isStatic = true
-        // 将静态节点序列化为模板字符串，存放到列表里
-        hoistedList.push(serializeNode(ast))
-        // ast节点设置索引属性，与模版字符串建立关联
-        ast.hoistedIndex = hoistedList.length - 1
-    } else if (ast.children && ast.children.length > 0) {
-        // 递归处理子节点
-        ast.children.forEach((child) => {
-            staticNodeCache(child)
-        })
-    }
-}
-// 将静态节点序列化为模板字符串
-const serializeNode = function (ast) {
-    // 文本节点直接返回
-    if (ast.type === TYPE.TEXT) {
-        return ast.value
-    }
-    // 处理属性
-    const propsArray = []
-    for (let k in ast.attrs) {
-        const v = ast.attrs[k]?.value
-        propsArray.push(`${k} = "${v}"`)
-    }
-    const propsStr = propsArray.join(" ")
-    if (ast.isCloseSelf) {
-        return `<${ast.tag} ${propsStr}/>`
-    } else {
-        // 处理子节点
-        let childrenArray, childrenStr = ''
-        if (ast.children) {
-            childrenArray = ast.children.map((child) => {
-                return serializeNode(child)
-            })
-            childrenStr = childrenArray.join("")
-        }
-        return `<${ast.tag} ${propsStr}>${childrenStr}</${ast.tag}>`
-    }
-}
-// 3. 生成render函数内容前，遍历列表，根据索引生成变量名，变量提升到render函数之外
-export const generate = function (ast) {
-    // 生成静态节点变量声明
-    const hoistedDeclarations = hoistedList.map((item, i) => {
-        return `const _hoisted_${i} = createStaticNode('${item}')`
-    }).join(';\n')
-    // 重置静态节点列表
-    hoistedList = []
-    // 递归处理ast
-    const resultStr = digui(ast)
-    // 把字符串转成真实的函数
-    // 把变量提取到render函数之外
-    // 这里的render函数写法要注意不要用箭头函数，不然上下文this会有问题
-    const funcStr = `
-        ${hoistedDeclarations}
-        const render = function(){
-           return ${resultStr}
-        }
-        return render
-    `
-    const func = new Function('createVNode', 'createTextNode', 'createStaticNode', funcStr)
-    const renderFunc = func(h.createVNode,h.createTextNode,h.createStaticNode)    
-    return renderFunc
-}
-// 4. render函数生成时，用变量名替换createStaticNode
-function digui(obj) {
-    let str = ''
-    if (obj.isStatic) {
-        // 根据索引得到变量名
-        str += `_hoisted_${obj.hoistedIndex}`
-    } else {
-        // 其他原代码
-        // ...
-    }
-    return str
-}
-```
 ### 应用
 ```js
 // compiler.js
 export const tranform = function (ast) {
     // 更新类型标记
-    markPatchFlag(ast)
-    // 静态节点缓存
-    staticNodeCache(ast)
+    markPatchFlag(ast)    
 }
 ```
 
@@ -324,20 +197,7 @@ export const update = function (componentInstance) {
     const newVnode = componentInstance.render()
    //...
 }
-const createDomDuiGui = function ({ instance, vnode, parentDom, insertIndex }) {
-    if (!vnode) return
-    let dom
-    // 如果是静态节点
-    if (vnode.isStatic) {        
-        dom = vnode.mount()
-    } else {
-        //...
-    }
-    // 虚拟节点与真实节点建立映射
-    vnode.el = dom
-    // 3.插入dom
-    // ...
-}
+
 // 新的diff函数
 // 参数1:旧的Vnode树
 // 参数2:新的Vnode树
@@ -345,7 +205,6 @@ const createDomDuiGui = function ({ instance, vnode, parentDom, insertIndex }) {
 // 参数4:在父节点中插入的位置
 const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
     // 节点相同不需要对比，直接返回
-    // 静态节点用的缓存节点，所以新旧节点一定是相等的
     if (oldVnodeTree === VnodeTree) {        
         return
     }    
@@ -414,29 +273,8 @@ const diff = function (oldVnodeTree, VnodeTree, parentDom, insertIndex) {
 ```
 ```js
 // appComponent.js
-// 模版进行调整，增加静态节点元素
-// 定义模板
-const template = `
-  <div  :class="class1">
-   <a href="https://www.baidu.com" target="_blank">我是静态节点1</a>
-   <div id="static2" v-if="isShow"><p>我是静态节点2</p>  </div>
-  <button id="add" @click="add(1)">add</button>
-   <button id="hide" @click="hide">{{btnText}}</button>
-   <ChildComponent    :num="num" @add="add"></ChildComponent>
-    <a href="https://www.baidu.com" target="_blank">我是静态节点3</a>
-   <div id="static4" v-if="isShow"><p>我是静态节点4</p>  </div>  
-
-   <button  @click="addItem(444)">addItem</button>  
-    <button  @click="sort">排序</button> 
-   <ul>
-      <li v-for="item in items" :key="item.id">
-        我是for列表：{{item.text}}
-        <button  @click="delItem(item)">delItem</button>        
-      </li>
-   </ul> 
- `
  // ...
- // 新增列表逻辑
+ // 把列表数据改足够大
 const array = new Array(10000).fill(0).map((i, k) => {
     return { id: k, text: k }
 }).reverse()
@@ -453,4 +291,4 @@ const sort = () => {
 列表数据20000条表现：
 ![优化后结果图20000](../_media/optimize_patchFlag_20000.png)
 
-可以看到时间数据比之前好太多，2万条数据的挂载更新也就100多毫秒
+可以看到时间数据比之前好太多了，效果非常明显

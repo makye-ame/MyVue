@@ -332,29 +332,28 @@ const createDomDuiGui = function ({ instance, vnode, parentDom, insertIndex }) {
     }
 }
 // 根据虚拟节点移除真实dom
+// 这里有一个注意点：删除操作是先逻辑-后dom，也就是说先执行unmount，然后才删除真实dom
+// 这样在unmount函数里依然可以访问到dom，另外组件的事件监听（如 window.scroll）、计时器等资源，需要在 DOM 移除前清理，否则会残留引用，导致内存泄漏。
+// 如果子节点里有组件，需要递归处理子组件的卸载，但是dom的删除统一删除父节点即可！
 function removeDomByVnode(vnode, parentDom) {
-    // 1. 如果是组件，触发 beforeUnmount 钩子
-    if (vnode.component) {
-        vnode.component.beforeUnmount?.();
-    }
-
+    // 先逻辑删除
+    unmountComponent(vnode)
+    // 后删除真实dom
+    const dom = vnode.el || vnode.component?.vnode?.el;
+    parentDom.removeChild(dom);
+}
+function unmountComponent(vnode) {   
+    // 1.触发 beforeUnmount 钩子    
+    vnode?.component?.beforeUnmount?.();
     // 2. 递归处理子组件
     if (vnode.childrens && vnode.childrens.length > 0) {
         vnode.childrens.forEach(child => {
-            if (typeof child === 'object') {
-                removeDomByVnode(child, vnode.el || parentDom);
-            }
+            unmountComponent(child)
         });
     }
+    // 3.触发 unmount 钩子    
+    vnode?.component?.unmount?.();
 
-    // 3. 移除当前节点
-    const dom = vnode.el || vnode.component?.vnode?.el;
-    parentDom.removeChild(dom);
-
-    // 4. 触发 unmounted 钩子
-    if (vnode.component) {
-        vnode.component.unmounted?.();
-    }
 }
 ```
 

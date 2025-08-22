@@ -1,6 +1,13 @@
 // 建立源对象和代理之间的映射，避免重复代理
 const reactiveMap = new WeakMap()
-// reative代理对象，支持深层嵌套
+
+// 优化对数组的代理
+// 数组的删除增加会导致后续的项都更改，从而触发了多次拦截，这不是我们想要的
+// 所以我们需要覆盖数组的方法，返回数组变异方法，在方法里统一触发一次更新
+// 如果是数组变异方法导致数组的修改，直接跳过触发（已在上一步中手动触发）
+// 拦截数组的方法
+const arrayMethods = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse']
+let isMutating = false  // 是否正在执行变异方法
 export const reactive = function (obj) {
     if (typeof obj !== 'object' || obj === null) {
         return obj // 非对象或 null 不需要代理
@@ -15,6 +22,18 @@ export const reactive = function (obj) {
             // 收集订阅者
             track(target, key)
             let value = target[key]
+            // 拦截数组的方法，返回数组变异方法，在方法里统一触发一次更新
+            if (Array.isArray(target) && arrayMethods.includes(key)) {
+                return function (...args) {
+                    isMutating = true
+                    const res = target[key].apply(this, args)
+                    isMutating = false
+                    // 触发更新
+                    trigger(target, 'length')
+                    return res
+                }
+
+            }
             if (typeof value === 'object') {
                 return reactive(value)
             } else {
@@ -23,11 +42,13 @@ export const reactive = function (obj) {
         },
         set(target, key, value) {
             // 判断新旧值不等
-            // 但是如果是数组添加删除元素，会触发length的更改，而新旧值一定相等，所以特殊处理下
-            if (target[key] !== value || key === 'length') {
+            if (target[key] !== value) {
                 target[key] = value
                 // 触发更新
-                trigger(target, key)
+                // 如果是数组变异方法导致的修改，直接跳过触发（已在包装方法中手动触发）
+                if (!isMutating) {
+                    trigger(target, key)
+                }
             }
             // set必须设置返回
             return true
@@ -37,6 +58,43 @@ export const reactive = function (obj) {
     reactiveMap.set(obj, proxy)
     return proxy
 }
+// reative代理对象，支持深层嵌套
+// export const reactive = function (obj) {
+//     if (typeof obj !== 'object' || obj === null) {
+//         return obj // 非对象或 null 不需要代理
+//     }
+//     // 已经有代理直接返回
+//     if (reactiveMap.has(obj)) {
+//         return reactiveMap.get(obj)
+//     }
+//     // reactive做两件事，1：生成一个proxy对象，2.做get，set拦截
+//     const proxy = new Proxy(obj, {
+//         get(target, key) {
+//             // 收集订阅者
+//             track(target, key)
+//             let value = target[key]
+//             if (typeof value === 'object') {
+//                 return reactive(value)
+//             } else {
+//                 return value
+//             }
+//         },
+//         set(target, key, value) {
+//             // 判断新旧值不等
+//             // 但是如果是数组添加删除元素，会触发length的更改，而新旧值一定相等，所以特殊处理下
+//             if (target[key] !== value || key === 'length') {
+//                 target[key] = value
+//                 // 触发更新
+//                 trigger(target, key)
+//             }
+//             // set必须设置返回
+//             return true
+//         },
+//     })
+//     // 目标对象和代理对象建立映射关系
+//     reactiveMap.set(obj, proxy)
+//     return proxy
+// }
 // ref的默认值可以是普通类型，也可以是对象，如果是对象，会再封装成reactie
 export const ref = function (defaultV) {
     const refObj = {
@@ -48,7 +106,7 @@ export const ref = function (defaultV) {
                 return defaultV
             }
         },
-        set value(v) {            
+        set value(v) {
             if (defaultV !== v) {
                 defaultV = v
                 trigger(this, 'value')
@@ -59,6 +117,7 @@ export const ref = function (defaultV) {
 }
 // dom更新是副作用，watchEffect回调是副作用，可以把副作用看成是订阅者
 let currentEffect = null
+
 
 // 收集订阅者
 const track = function (target, key) {
@@ -96,11 +155,18 @@ const trigger = function (target, key) {
         listerner()
     })
 }
+// todo 
+// 这里的watchEffect不能嵌套使用
+// 一个时间点只能支持一个watchEffect存在，不然会有潜在问题
+// 要支持嵌套调用，需要使用栈来存储当前的effect
+let effectStack = []
 export const watchEffect = function (update) {
     const effect = () => {
         currentEffect = effect
+        effectStack.push(effect)
         update()
-        currentEffect = null
+        effectStack.pop()
+        currentEffect = effectStack.length - 1 >= 0 ? effectStack[effectStack.length - 1] : null
     }
     // 立即执行，在这个过程中会自动收集依赖
     effect()
