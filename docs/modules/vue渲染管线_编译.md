@@ -1,48 +1,70 @@
-# vue原理深度剖析：渲染管线-编译
-？？？
- 这里是不是可以加个与前文的衔接：比如上篇文章学习到什么，这篇文章将要学习到什么
-文章最后也可以来个总结
+# Vue原理深度剖析：渲染管线-编译
 
-在看这篇文章之前建议阅读下vue官方文档:[渲染机制](https://cn.vuejs.org/guide/extras/rendering-mechanism.html)
-文章里提到渲染管线有几个事：编译、挂载、更新。本文讲的是编译阶段。
+## 前言
 
-## 虚拟dom
-在说vue模版编译之前，必须先了解下虚拟dom，虚拟dom是需要进行模版编译的原因，也是模版编译的目的。
+在深入了解Vue的编译阶段之前，建议先阅读[Vue官方文档的渲染机制](https://cn.vuejs.org/guide/extras/rendering-mechanism.html)部分。Vue的渲染管线主要包含三个阶段：**编译**、**挂载**和**更新**。本文将重点讲解编译阶段的工作原理。
 
-**什么是虚拟dom?**
-虚拟dom是用js对象模拟的dom树，用js对象表示dom节点.
+## 1. 虚拟DOM概述
 
-**为什么需要虚拟dom**
-假设你是一位城市规划师，真实城市（真实 DOM）改造成本极高 —— 拆栋楼、拓条路都要大动干戈，还影响居民生活。
-虚拟 DOM 就是你桌上的沙盘模型：
-先在沙盘上随便改：挪建筑、拓街道，怎么试错都轻松。
-改完后，对比新旧沙盘，只挑出「必须动的地方」。
-最后照着清单去现场，只改这些地方，其他啥也不动。
-这样就不用瞎折腾真实城市，少花钱、少扰民 —— 虚拟 DOM 就干这事儿。
+在探讨Vue模板编译之前，我们需要先理解虚拟DOM的概念，因为它是模板编译的最终目标。
 
-## 模版编译阶段
-模版编译的最终目的，就是输出一个可以生成虚拟dom树的函数：render渲染函数
-要达成这个目的，需要经历几个过程：模版-》AST语法树-》render渲染函数
-模版解析成AST语法树,需要模版解析器：parse模版解析器
-AST语法树解析成render渲染函数,需要模版编译器：compile模版编译器
-而vue3里做了一些编译时的优化，也就是对AST树进行优化标记，本篇先不涉及，为了让大家了解模版编译阶段的过程，我们只做最基本的功能分析
+### 1.1 什么是虚拟DOM？
 
-## 什么是AST抽象语法树
-你可以把 AST 理解成「所有语言的通用骨架」，不止 Vue 模板里有，JavaScript、Python 甚至中文里都藏着它的影子。
-拿说话举例子：中文有「主谓宾」的基本规矩（比如「我吃饭」），不管你说「我吃了一碗香喷喷的米饭」还是「他昨天在餐厅吃牛排」，骨子里都逃不开「谁 + 做 + 什么」这个骨架 —— 这就是中文的「语法结构规律」。
-AST 做的事，就是把这种「骨架」抽出来：
-比如 JavaScript 里，不管你写let a = 1 + 2还是const b = (3 * 4) / 5，AST 都会提炼出「声明变量→赋值→运算」的核心结构；
-Babel 能把高版本 JS 转成低版本，靠的就是先把高版本代码拆成 AST（看懂骨架），再按低版本语法重新拼一遍这个骨架；
-Vue 模板里的<div @click="fn">text</div>，AST 也会拆成「标签类型→事件绑定→文本内容」的骨架，方便 Vue 理解和渲染。
-简单说，AST 就像语言的「X 光片」—— 不管表面文字多复杂，它总能照出最核心的结构骨架，让机器能看懂「这句话 / 这段代码到底在讲什么」。
+虚拟DOM是使用JavaScript对象来模拟真实DOM树的一种技术，它通过JS对象表示DOM节点及其关系。
 
-## AST语法树-节点设计
-需要考虑的因素有：
-- 节点类型type:ROOT(根元素),ELEMENT(元素),TEXT(文本),INTERPOLATION(插值,也就是vue中{{...}}),
-- 节点属性attrs:ATTRIBUTE(普通属性),DIRECTIVE(指令),EVENT(事件)
-- 子节点children：子节点可以是元素，文本，插值
-- 父节点parent：建立父子关系双向映射，方便回溯查找父节点
-节点常规结构如下：
+### 1.2 为什么需要虚拟DOM？
+
+想象一下，如果你是一位城市规划师：
+
+- **真实城市**（真实DOM）的改造成本极高 — 拆一栋楼、拓一条路都需要大动干戈，还会影响居民生活
+- **虚拟DOM**就像你桌上的沙盘模型：
+  1. 先在沙盘上自由修改：挪动建筑、拓展街道，试错成本极低
+  2. 修改完成后，对比新旧沙盘，只标记出"必须改动的地方"
+  3. 最后按照清单在实际城市中进行有针对性的改造，其他区域保持不变
+
+这种方式避免了对真实DOM的频繁操作，提高了性能和效率。
+
+## 2. 模板编译流程
+
+模板编译的最终目的是输出一个能生成虚拟DOM树的**render渲染函数**。整个编译过程可以概括为：
+
+```
+模板 → AST语法树 → render渲染函数
+```
+
+这个过程包含两个主要阶段：
+- **Parse阶段**：将模板解析成AST语法树
+- **Generate阶段**：将AST语法树转换成render渲染函数
+
+值得注意的是，Vue3在编译时引入了一些优化机制，如对AST树进行优化标记，但本文将聚焦于基本编译流程的讲解。
+
+## 3. AST抽象语法树
+
+### 3.1 AST的本质
+
+AST（抽象语法树）可以理解为"所有语言的通用骨架"。不仅Vue模板需要它，JavaScript、Python甚至自然语言都可以用AST来表示其结构。
+
+以自然语言为例，中文有"主谓宾"的基本结构（如"我吃饭"）。无论句子多复杂，如"我吃了一碗香喷喷的米饭"或"他昨天在餐厅吃牛排"，其核心结构都是"谁 + 做 + 什么"。
+
+AST的作用就是提取这种核心结构：
+
+- 在JavaScript中，无论是`let a = 1 + 2`还是`const b = (3 * 4) / 5`，AST都能提炼出"声明变量→赋值→运算"的核心结构
+- Babel能将高版本JS转为低版本，正是因为它先将代码解析为AST，再按低版本语法重新构建
+- Vue模板中的`<div @click="fn">text</div>`，通过AST会被解析为"标签类型→事件绑定→文本内容"的结构
+
+简言之，AST就像语言的"X光片"，能透视出表面文字下的核心结构，让计算机理解"这段代码在做什么"。
+
+### 3.2 AST节点设计
+
+AST节点设计需要考虑以下因素：
+
+- **节点类型(type)**：ROOT(根元素)、ELEMENT(元素)、TEXT(文本)、INTERPOLATION(插值表达式)
+- **节点属性(attrs)**：ATTRIBUTE(普通属性)、DIRECTIVE(指令)、EVENT(事件)
+- **子节点(children)**：可以包含元素、文本、插值等子节点
+- **父节点(parent)**：建立父子关系的双向映射，便于回溯查找
+
+以下是模拟的AST节点的典型结构：
+
 ```js
 {
     type: TYPE.ELEMENT|TYPE.TEXT|TYPE.INTERPOLATION,
@@ -62,9 +84,22 @@ Vue 模板里的<div @click="fn">text</div>，AST 也会拆成「标签类型→
     parent:parent,
 }
 ```
-## 模版解析器parse
-解析模板字符串时，分为开始节点，结束节点，文本节点，插值节点。
-不同节点的处理逻辑不同，需要根据不同节点类型进行处理。
+
+## 4. Parse阶段详解
+
+Parse阶段的主要任务是解析模板字符串，识别不同类型的节点（开始标签、结束标签、文本节点、插值节点等），并根据各自的处理逻辑构建AST树。
+
+### 4.1 Parse阶段的核心流程
+
+Parse阶段的核心是通过正则表达式识别不同类型的节点，并构建AST树。主要步骤包括：
+
+1. 初始化根节点
+2. 使用正则表达式识别模板中的标签、属性和插值表达式
+3. 根据不同节点类型（开始标签、结束标签、文本、插值）执行相应的处理逻辑
+4. 维护当前节点的状态，建立节点之间的父子关系
+
+### 4.2 代码实现
+
 
 ```js
 // compile.js
@@ -78,7 +113,6 @@ const TYPE =  {
     EVENT : 'event' //事件
 }
 export const parse = function (template) {
-  let i = 0
   const root = { type: TYPE.ROOT, tag: 'div', children: [] }
   let current = root
   template = template.trim()
@@ -88,6 +122,7 @@ export const parse = function (template) {
   const endTagREg = /<\/(\w+)>/
   // 插值正则
   const interReg = /{{([^}]+)}}/
+  let i = 0
   while (i < template.length) {
     const tempStr = template.slice(i)
     if (template[i] === '<') {
@@ -204,7 +239,11 @@ const getAttributes = function (attrStr) {
   return resultObj
 }
 ```
-测试看下模版编译的结果：
+
+### 4.3 应用示例
+
+下面是一个模板编译的示例：
+
 ```js
 const template = `
  <div id="1" :class="class1">
@@ -216,12 +255,18 @@ const template = `
  `
 const ast = parse(template)
 ```
-parse结果如下：
+
+解析后的AST结构如下图所示：
+
 ![parse结果图](../_media/compile_parse.png)
 
-## createVNode函数
-在讲generate阶段之前，先了解下createVNode函数。
-createVNode函数是创建虚拟dom的函数，它的参数是标签名，属性对象，子节点数组。
+## 5. 虚拟DOM创建函数
+
+在讲解Generate阶段之前，我们需要了解两个关键函数：`createVNode`和`createTextNode`，它们是生成虚拟DOM的基础。
+
+### 5.1 createVNode函数
+
+`createVNode`函数用于创建虚拟DOM节点，接收三个参数：标签名、属性对象和子节点数组。
 
 ```js
 // help.js
@@ -235,8 +280,11 @@ createVNode(tag, props, childrens) {
     }
   },
 ```
-## createTextNode函数
-这里简单模拟，直接返回文本内容。
+
+### 5.2 createTextNode函数
+
+`createTextNode`函数用于创建文本节点，这里模拟较为简单，直接返回文本内容：
+
 ```js
 // help.js
 createTextNode(value) {
@@ -244,22 +292,33 @@ createTextNode(value) {
   },
 ```
 
-## 模版编译器compile
-这个环节的作用是把AST抽象语法树转成render渲染函数。如：
+## 6. Generate阶段详解
+
+Generate阶段的核心任务是将AST抽象语法树转换为render渲染函数。
+
+### 6.1 Generate阶段的目标
+
+render函数的作用是生成虚拟DOM树，例如：
+
 ```js
 function render(){
-   return createVNode('div',{id:1,class:'red'，[createTextNode('我是div')]      
+   return createVNode('div',{id:1,class:'red'},[createTextNode('我是div')])      
 }
 ```
 
-而render函数的内容是动态根据AST去生成的,所以它的内容需要用字符串来做拼接，最后使用new Function()把字符串转成函数。如：
+由于render函数的内容是根据AST动态生成的，我们需要通过字符串拼接来构建函数体，最后使用`new Function()`将字符串转换为实际的函数：
+
 ```js
 const funcStr = `
-  return createVNode('div',{id:1,class:'red'，[createTextNode('我是div')]      
+  return createVNode('div',{id:1,class:'red'},[createTextNode('我是div')])      
 `
 const render = new Function('createVNode','createTextNode',funcStr)
 ```
-另一个关键点是对于模板中引用的动态值，需要正确的与当前组件的数据(setup的返回值)相关联。
+
+### 6.2 处理动态值
+
+模板中的动态值需要与组件实例的数据正确关联。下面是获取动态值的辅助函数：
+
 ```js
 // 获取动态值的字符串,这里不考虑表达式的情况
 const getExpStr = function (exp) {
@@ -272,7 +331,10 @@ const getExpStr = function (exp) {
 }
 ```
 
-generate阶段完整代码实现：
+### 6.3 代码实现
+
+Generate阶段的完整代码实现如下：
+
 ```js
 export const generate = function (ast) {
     // 递归处理ast
@@ -373,9 +435,12 @@ const getExpStr = function (exp) {
 const getTag = function (tag) {
     return `this.${tag} ?? '${tag}'`
 }
-
 ```
-测试看下模版编译的结果：
+
+### 6.4 应用示例
+
+下面是一个模板编译的示例：
+
 ```js
 const template = `
  <div id="1" :class="class1">
@@ -388,6 +453,6 @@ const template = `
 const ast = parse(template)
 generate(ast)
 ```
-generate结果如下：
+生成结果如下：
 ![generate结果图](../_media/compile_generate.png)
 

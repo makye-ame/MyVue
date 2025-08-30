@@ -10,9 +10,10 @@ const TYPE = {
     EVENT: 'event' //事件
 }
 export const parse = function (template) {
-    let i = 0
+    // 创建根结点
     const root = { type: TYPE.ROOT, tag: 'div', children: [] }
     let current = root
+    // 开始处理模版
     template = template.trim()
     // 开始标签正则
     const startTagReg = /<(\w+)([^>]*)(\/?)>/
@@ -20,6 +21,7 @@ export const parse = function (template) {
     const endTagREg = /<\/(\w+)>/
     // 插值正则
     const interReg = /{{([^}]+)}}/
+    let i = 0
     while (i < template.length) {
         const tempStr = template.slice(i)
         if (template[i] === '<') {
@@ -222,12 +224,12 @@ let hoistedContainerList = []
 // v-for指令下的静态容器不要提升变量缓存！！！
 // 用栈存储v-for指令
 const vforStack = []
-const staticContainerNodeCache = function (ast) { 
+const staticContainerNodeCache = function (ast) {
     // 入栈   
     if (ast.attrs?.['v-for']) {
         vforStack.push(ast)
     }
-    if (ast.patchFlag === PatchFlags.CHILDREN) {       
+    if (ast.patchFlag === PatchFlags.CHILDREN) {
         // v-for栈为空，则不在v-for指令下
         if (vforStack.length === 0) {
             hoistedContainerList.push(ast)
